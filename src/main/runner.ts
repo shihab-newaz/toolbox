@@ -1,4 +1,4 @@
-import { spawn } from "node:child_process";
+import { spawn, spawnSync, type ChildProcess } from "node:child_process";
 import type { OutputEvent, RunResult, Tool } from "../shared/types";
 
 export interface Shell {
@@ -18,6 +18,25 @@ export const POWERSHELL: Shell = {
     `[Console]::OutputEncoding=[Text.Encoding]::UTF8; $ErrorActionPreference='Stop'; ${command}; exit $LASTEXITCODE`,
 };
 
+const running = new Set<ChildProcess>();
+
+export function runningCommandCount(): number {
+  return running.size;
+}
+
+/** Stops every running command and the processes it started (used when the app quits). */
+export function killAllRunning(): void {
+  for (const child of running) {
+    if (child.pid === undefined) continue;
+    if (process.platform === "win32") {
+      // /T takes the whole process tree: PowerShell does not stop what it launched.
+      spawnSync("taskkill", ["/pid", String(child.pid), "/T", "/F"], { windowsHide: true });
+    } else {
+      child.kill("SIGKILL");
+    }
+  }
+}
+
 function runCommand(
   command: string,
   shell: Shell,
@@ -26,7 +45,10 @@ function runCommand(
   return new Promise((resolve) => {
     const child = spawn(shell.file, [...shell.args, shell.wrapCommand?.(command) ?? command], {
       windowsHide: true,
+      // stdin ignored: a command that waits for input gets end-of-input, not a hang.
+      stdio: ["ignore", "pipe", "pipe"],
     });
+    running.add(child);
     child.stdout.setEncoding("utf8");
     child.stdout.on("data", (text: string) =>
       onEvent({ type: "output", stream: "stdout", text }),
@@ -35,10 +57,14 @@ function runCommand(
     child.stderr.on("data", (text: string) =>
       onEvent({ type: "output", stream: "stderr", text }),
     );
-    child.on("error", (err) =>
-      resolve({ exitCode: null, error: `Could not start ${shell.file}: ${err.message}` }),
-    );
-    child.on("close", (code) => resolve({ exitCode: code }));
+    child.on("error", (err) => {
+      running.delete(child);
+      resolve({ exitCode: null, error: `Could not start ${shell.file}: ${err.message}` });
+    });
+    child.on("close", (code) => {
+      running.delete(child);
+      resolve({ exitCode: code });
+    });
   });
 }
 

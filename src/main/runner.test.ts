@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Tool } from "../shared/types";
 import type { OutputEvent } from "../shared/types";
-import { POWERSHELL, runTool, type Shell } from "./runner";
+import { killAllRunning, POWERSHELL, runningCommandCount, runTool, type Shell } from "./runner";
 
 // Node stands in for the shell, so each "command" below is a line of JavaScript.
 const nodeShell: Shell = { file: process.execPath, args: ["-e"] };
@@ -20,6 +20,16 @@ async function run(tool: Tool) {
     events.push({ ...e, at: Date.now() }),
   );
   return { result, events };
+}
+
+async function waitFor<T>(read: () => T | undefined, ms = 5000): Promise<T> {
+  const until = Date.now() + ms;
+  for (;;) {
+    const value = read();
+    if (value) return value;
+    if (Date.now() > until) throw new Error("timed out waiting");
+    await new Promise((r) => setTimeout(r, 50));
+  }
 }
 
 const outputText = (events: OutputEvent[], stream: "stdout" | "stderr") =>
@@ -126,6 +136,58 @@ describe("runTool", () => {
     const result = await runTool(toolOf("Get-PSDrive C | Out-String"), POWERSHELL, () => {});
 
     expect(result).toEqual({ ok: true, failedStep: null, exitCode: 0 });
+  });
+
+  it("gives a command that reads input an immediate end-of-input instead of hanging", async () => {
+    const { result, events } = await run(
+      toolOf('process.stdin.resume(); process.stdin.on("end", () => console.log("got eof"))'),
+    );
+
+    expect(result.ok).toBe(true);
+    expect(outputText(events, "stdout")).toContain("got eof");
+  }, 8000);
+
+  it("stops a running command, and the processes it started, when told to kill everything", async () => {
+    const events: OutputEvent[] = [];
+    // Real PowerShell: it starts the grandchild as an ordinary process, which only a
+    // tree kill (taskkill /T) reaches. (Node's own spawn would hide the difference.)
+    const node = process.execPath.replace(/'/g, "''");
+    const finished = runTool(
+      toolOf(
+        `$p = Start-Process -PassThru -WindowStyle Hidden -FilePath '${node}' -ArgumentList '-e','setTimeout(function(){},60000)'; Write-Output "grandchild $($p.Id)"; Start-Sleep 60`,
+      ),
+      POWERSHELL,
+      (e) => events.push(e),
+    );
+    const grandchild = await waitFor(() => /grandchild (\d+)/.exec(outputText(events, "stdout"))?.[1]);
+
+    killAllRunning();
+    const result = await finished;
+
+    expect(result.ok).toBe(false);
+    await new Promise((r) => setTimeout(r, 500));
+    expect(() => process.kill(Number(grandchild), 0)).toThrow();
+  }, 15000);
+
+  it("counts a command as running only while it runs, including after a failed start", async () => {
+    const events: OutputEvent[] = [];
+    const finished = runTool(
+      toolOf('console.log("up"); setTimeout(() => {}, 1000)'),
+      nodeShell,
+      (e) => events.push(e),
+    );
+    await waitFor(() => outputText(events, "stdout").includes("up") || undefined);
+    expect(runningCommandCount()).toBe(1);
+
+    await finished;
+    expect(runningCommandCount()).toBe(0);
+
+    await runTool(toolOf("anything"), { file: "no-such-shell-xyz", args: [] }, () => {});
+    expect(runningCommandCount()).toBe(0);
+  }, 10000);
+
+  it("does nothing when no command is running", () => {
+    expect(() => killAllRunning()).not.toThrow();
   });
 
   it("fails the Run, without throwing, when the shell cannot be started", async () => {
