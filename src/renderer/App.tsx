@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { Manifest, OutputEvent, RunResult, ToolboxBridge } from "../shared/types";
 
 interface RunState {
@@ -32,7 +32,12 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
     [bridge],
   );
 
+  // A ref, not state: two clicks before React re-renders must not both start the Tool.
+  const inFlight = useRef(new Set<string>());
+
   async function run(toolId: string) {
+    if (inFlight.current.has(toolId)) return;
+    inFlight.current.add(toolId);
     setRuns((prev) => ({ ...prev, [toolId]: { output: [], result: null } }));
     let result: RunResult;
     try {
@@ -45,6 +50,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
         error: err instanceof Error ? err.message : String(err),
       };
     }
+    inFlight.current.delete(toolId);
     setRuns((prev) => ({
       ...prev,
       [toolId]: { output: prev[toolId]?.output ?? [], result },

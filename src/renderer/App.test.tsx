@@ -107,6 +107,30 @@ describe("App", () => {
     expect(button.disabled).toBe(false);
   });
 
+  it("starts a Tool once even when two clicks land before the screen can re-render", async () => {
+    let started = 0;
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
+      {
+        runTool: () => {
+          started += 1;
+          return new Promise<RunResult>(() => {});
+        },
+      },
+    );
+    render(<App bridge={bridge} />);
+
+    const row = (await screen.findByText("Free-space check")).closest("li")!;
+    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    // Both clicks run inside one act(): React cannot re-render (and disable the button) between them.
+    act(() => {
+      button.click();
+      button.click();
+    });
+
+    expect(started).toBe(1);
+  });
+
   it("shows a Failed result and re-enables Run when the call to run the Tool itself fails", async () => {
     const { bridge } = fakeBridge(
       { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
