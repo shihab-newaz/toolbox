@@ -31,12 +31,18 @@ export function validateManifest(input: unknown): Manifest {
         throw new Error(`Tool "${tool.id}" has no steps`);
       }
       for (const step of tool.steps) {
+        if (typeof step !== "object" || step === null) {
+          throw new Error(`Tool "${tool.id}" has a step that is not an object`);
+        }
         if (step.kind !== "command" && step.kind !== "pause") {
           throw new Error(
             `Tool "${tool.id}" has an unknown step kind "${(step as { kind: string }).kind}"`,
           );
         }
-        if (step.kind === "command" && step.command.trim() === "") {
+        if (
+          step.kind === "command" &&
+          (typeof step.command !== "string" || step.command.trim() === "")
+        ) {
           throw new Error(`Tool "${tool.id}" has a blank command step`);
         }
       }

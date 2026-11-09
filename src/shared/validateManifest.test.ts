@@ -90,6 +90,22 @@ describe("validateManifest", () => {
     );
   });
 
+  it("rejects a Step that is not an object, with a Manifest message instead of a TypeError", () => {
+    const nullStep = tool({ steps: [null] });
+
+    expect(() => validateManifest(manifestWith(nullStep))).toThrow(
+      /tool "free-space" has a step that is not an object/i,
+    );
+  });
+
+  it("rejects a command Step that has no command text", () => {
+    const missing = tool({ steps: [{ kind: "command" }] });
+
+    expect(() => validateManifest(manifestWith(missing))).toThrow(
+      /tool "free-space" has a blank command step/i,
+    );
+  });
+
   it("rejects input that is not an object with a categories list", () => {
     expect(() => validateManifest({ tools: [] })).toThrow(
       /manifest must contain a categories list/i,
