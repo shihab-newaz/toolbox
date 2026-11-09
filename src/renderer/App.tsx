@@ -83,6 +83,8 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
                   >
                     Run
                   </button>
+                  <p className="meta">{tool.description}</p>
+                  <p className="meta">Risk: {tool.risk}</p>
                   {state && (
                     <>
                       <pre>{state.output.map((e) => e.text).join("")}</pre>

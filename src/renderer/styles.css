@@ -75,6 +75,11 @@ li > p {
   margin: 0;
 }
 
+.meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
 button {
   background: var(--accent);
   color: var(--accent-text);

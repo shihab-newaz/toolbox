@@ -53,6 +53,28 @@ describe("App", () => {
     expect(screen.getByText("Count penguins")).toBeTruthy();
   });
 
+  it("shows each Tool's description and its Risk level", async () => {
+    const { bridge } = fakeBridge({
+      categories: [
+        {
+          id: "c",
+          name: "Cleanup",
+          tools: [tool("a", "Peek", "read-only"), tool("b", "Tidy", "normal"), tool("c", "Purge", "high")],
+        },
+      ],
+    });
+
+    render(<App bridge={bridge} />);
+
+    expect(await screen.findByText("Peek description")).toBeTruthy();
+    expect(screen.getByText("Tidy description")).toBeTruthy();
+    expect(screen.getByText("Purge description")).toBeTruthy();
+    for (const [name, risk] of [["Peek", "read-only"], ["Tidy", "normal"], ["Purge", "high"]]) {
+      const row = screen.getByText(name!).closest("li")!;
+      expect(within(row).getByText(`Risk: ${risk}`)).toBeTruthy();
+    }
+  });
+
   it("runs a read-only Tool, shows its output as it arrives, then its result", async () => {
     let finish!: (r: RunResult) => void;
     const ran: string[] = [];
