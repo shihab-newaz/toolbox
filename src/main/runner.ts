@@ -4,6 +4,8 @@ import type { OutputEvent, RunResult, Tool } from "../shared/types";
 export interface Shell {
   file: string;
   args: string[];
+  /** Adjusts a command before it is handed to the shell. */
+  wrapCommand?: (command: string) => string;
 }
 
 export type RunEvent = OutputEvent;
@@ -11,6 +13,11 @@ export type RunEvent = OutputEvent;
 export const POWERSHELL: Shell = {
   file: "powershell.exe",
   args: ["-NoProfile", "-NonInteractive", "-Command"],
+  // UTF-8 output; any error stops the command with a failing exit code (PowerShell
+  // otherwise exits 0 when only an earlier statement failed); a native command's
+  // own exit code is passed through.
+  wrapCommand: (command) =>
+    `[Console]::OutputEncoding=[Text.Encoding]::UTF8; $ErrorActionPreference='Stop'; ${command}; exit $LASTEXITCODE`,
 };
 
 function runCommand(
@@ -19,7 +26,7 @@ function runCommand(
   onEvent: (event: RunEvent) => void,
 ): Promise<{ exitCode: number | null; error?: string }> {
   return new Promise((resolve) => {
-    const child = spawn(shell.file, [...shell.args, command], {
+    const child = spawn(shell.file, [...shell.args, shell.wrapCommand?.(command) ?? command], {
       windowsHide: true,
     });
     child.stdout.setEncoding("utf8");
@@ -51,11 +58,17 @@ export async function runTool(
         error: "Pause steps are not supported yet",
       };
     }
-    if (step.kind === "command") {
-      const { exitCode, error } = await runCommand(step.command, shell, onEvent);
-      if (exitCode !== 0) {
-        return { ok: false, failedStep: index, exitCode, ...(error && { error }) };
-      }
+    if (step.kind !== "command") {
+      return {
+        ok: false,
+        failedStep: index,
+        exitCode: null,
+        error: `Unknown step kind "${(step as { kind: string }).kind}"`,
+      };
+    }
+    const { exitCode, error } = await runCommand(step.command, shell, onEvent);
+    if (exitCode !== 0) {
+      return { ok: false, failedStep: index, exitCode, ...(error && { error }) };
     }
   }
   return { ok: true, failedStep: null, exitCode: 0 };

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Tool } from "../shared/types";
-import { runTool, type RunEvent, type Shell } from "./runner";
+import { POWERSHELL, runTool, type RunEvent, type Shell } from "./runner";
 
 // Node stands in for the shell, so each "command" below is a line of JavaScript.
 const nodeShell: Shell = { file: process.execPath, args: ["-e"] };
@@ -58,13 +58,14 @@ describe("runTool", () => {
   it("delivers output while the command is still running, not at the end", async () => {
     const { events } = await run(
       toolOf(
-        'console.log("early"); setTimeout(() => console.log("late"), 400)',
+        'console.log("early"); setTimeout(() => console.log("late"), 1500)',
       ),
     );
 
     const early = events.find((e) => e.type === "output" && e.text.includes("early"));
     const late = events.find((e) => e.type === "output" && e.text.includes("late"));
-    expect(late!.at - early!.at).toBeGreaterThan(250);
+    // 1.5 s apart in the child; a generous 500 ms floor leaves 1 s of slack for a loaded machine.
+    expect(late!.at - early!.at).toBeGreaterThan(500);
   });
 
   it("refuses a pause Step instead of silently skipping it", async () => {
@@ -82,6 +83,48 @@ describe("runTool", () => {
     expect(result.failedStep).toBe(1);
     expect(result.error).toMatch(/pause/i);
     expect(outputText(events, "stdout")).not.toContain("after");
+  });
+
+  it("fails the Run on a Step whose kind is unknown, instead of skipping it", async () => {
+    const odd = {
+      ...toolOf('console.log("before")'),
+      steps: [
+        { kind: "command", command: 'console.log("before")' },
+        { kind: "sleep", seconds: 5 },
+      ],
+    } as unknown as Tool;
+    const { result } = await run(odd);
+
+    expect(result.ok).toBe(false);
+    expect(result.failedStep).toBe(1);
+    expect(result.error).toMatch(/unknown step kind "sleep"/i);
+  });
+
+  it("fails the Run when one PowerShell statement errors even though a later one succeeds", async () => {
+    const tool = toolOf("Get-Item C:\\no_such_folder_zzz; 'still ok'");
+    const result = await runTool(tool, POWERSHELL, () => {});
+
+    expect(result.ok).toBe(false);
+    expect(result.failedStep).toBe(0);
+  });
+
+  it("reports a native command's real exit code through PowerShell", async () => {
+    const result = await runTool(toolOf("cmd /c exit 5"), POWERSHELL, () => {});
+
+    expect(result).toMatchObject({ ok: false, failedStep: 0, exitCode: 5 });
+  });
+
+  it("delivers non-ASCII PowerShell output intact", async () => {
+    const events: RunEvent[] = [];
+    await runTool(toolOf("Write-Output 'héllo wörld'"), POWERSHELL, (e) => events.push(e));
+
+    expect(outputText(events, "stdout")).toContain("héllo wörld");
+  });
+
+  it("still runs a read-only pipeline through PowerShell and succeeds", async () => {
+    const result = await runTool(toolOf("Get-PSDrive C | Out-String"), POWERSHELL, () => {});
+
+    expect(result).toEqual({ ok: true, failedStep: null, exitCode: 0 });
   });
 
   it("fails the Run, without throwing, when the shell cannot be started", async () => {
