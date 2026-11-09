@@ -12,6 +12,6 @@
     "isolatedModules": true,
     "types": ["vite/client", "node"]
   },
-  "include": ["src/shared", "src/renderer", "src/main", "src/preload", "vite.config.ts"],
+  "include": ["src/shared", "src/renderer", "src/main", "src/preload", "vite.config.mts"],
   "exclude": ["node_modules", "dist", "dist-electron"]
 }

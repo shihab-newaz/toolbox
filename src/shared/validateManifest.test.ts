@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { manifest as shippedManifest } from "./manifest";
 import { validateManifest } from "./validateManifest";
 
 const tool = (overrides: Record<string, unknown> = {}) => ({
@@ -53,8 +54,16 @@ describe("validateManifest", () => {
           { kind: "pause", message: "Quit Docker Desktop, then continue" },
         ],
       }),
+      tool({ id: "hibernation", risk: "high" }),
     );
     expect(validateManifest(manifest)).toEqual(manifest);
+  });
+
+  it("accepts the Manifest the app ships with, which includes a read-only Free-space check", () => {
+    const valid = validateManifest(shippedManifest);
+    const tools = valid.categories.flatMap((c) => c.tools);
+
+    expect(tools.find((t) => t.id === "free-space-check")?.risk).toBe("read-only");
   });
 
   it("rejects input that is not an object with a categories list", () => {
