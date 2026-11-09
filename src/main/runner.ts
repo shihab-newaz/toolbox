@@ -1,23 +1,12 @@
 import { spawn } from "node:child_process";
-import type { Tool } from "../shared/types";
+import type { OutputEvent, RunResult, Tool } from "../shared/types";
 
 export interface Shell {
   file: string;
   args: string[];
 }
 
-export type RunEvent = {
-  type: "output";
-  stream: "stdout" | "stderr";
-  text: string;
-};
-
-export interface RunResult {
-  ok: boolean;
-  failedStep: number | null;
-  exitCode: number | null;
-  error?: string;
-}
+export type RunEvent = OutputEvent;
 
 export const POWERSHELL: Shell = {
   file: "powershell.exe",

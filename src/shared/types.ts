@@ -21,3 +21,24 @@ export interface Category {
 export interface Manifest {
   categories: Category[];
 }
+
+export interface OutputEvent {
+  type: "output";
+  stream: "stdout" | "stderr";
+  text: string;
+}
+
+export interface RunResult {
+  ok: boolean;
+  failedStep: number | null;
+  exitCode: number | null;
+  error?: string;
+}
+
+/** What the renderer may ask of the main process. */
+export interface ToolboxBridge {
+  getManifest(): Promise<Manifest>;
+  runTool(toolId: string): Promise<RunResult>;
+  /** Subscribe to live output of any running Tool; returns an unsubscribe function. */
+  onOutput(listener: (toolId: string, event: OutputEvent) => void): () => void;
+}
