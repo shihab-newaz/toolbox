@@ -1,6 +1,6 @@
-import type { Manifest } from "./types";
+import type { Manifest, RiskLevel } from "./types";
 
-const RISK_LEVELS = ["read-only", "normal", "high"];
+const RISK_LEVELS: readonly RiskLevel[] = ["read-only", "normal", "high"];
 
 export function validateManifest(input: unknown): Manifest {
   if (
@@ -13,6 +13,9 @@ export function validateManifest(input: unknown): Manifest {
   const manifest = input as Manifest;
   const seenIds = new Set<string>();
   for (const category of manifest.categories) {
+    if (!Array.isArray(category.tools)) {
+      throw new Error(`Category "${category.id}" must have a tools list`);
+    }
     for (const tool of category.tools) {
       if (seenIds.has(tool.id)) {
         throw new Error(`Tool id "${tool.id}" is used more than once`);
@@ -23,10 +26,18 @@ export function validateManifest(input: unknown): Manifest {
           `Tool "${tool.id}" has an invalid risk level "${tool.risk}"`,
         );
       }
+      if (!Array.isArray(tool.steps)) {
+        throw new Error(`Tool "${tool.id}" must have a steps list`);
+      }
       if (tool.steps.length === 0) {
         throw new Error(`Tool "${tool.id}" has no steps`);
       }
       for (const step of tool.steps) {
+        if (step.kind !== "command" && step.kind !== "pause") {
+          throw new Error(
+            `Tool "${tool.id}" has an unknown step kind "${(step as { kind: string }).kind}"`,
+          );
+        }
         if (step.kind === "command" && step.command.trim() === "") {
           throw new Error(`Tool "${tool.id}" has a blank command step`);
         }

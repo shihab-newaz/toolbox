@@ -66,6 +66,30 @@ describe("validateManifest", () => {
     expect(tools.find((t) => t.id === "free-space-check")?.risk).toBe("read-only");
   });
 
+  it("rejects a Category that has no tools list, with a Manifest message instead of a TypeError", () => {
+    const manifest = { categories: [{ id: "disk", name: "Disk" }] };
+
+    expect(() => validateManifest(manifest)).toThrow(
+      /category "disk" must have a tools list/i,
+    );
+  });
+
+  it("rejects a Tool that has no steps list, with a Manifest message instead of a TypeError", () => {
+    const noSteps = tool({ steps: undefined });
+
+    expect(() => validateManifest(manifestWith(noSteps))).toThrow(
+      /tool "free-space" must have a steps list/i,
+    );
+  });
+
+  it("rejects a Step whose kind is neither command nor pause", () => {
+    const odd = tool({ steps: [{ kind: "sleep", seconds: 5 }] });
+
+    expect(() => validateManifest(manifestWith(odd))).toThrow(
+      /tool "free-space".*step kind "sleep"/i,
+    );
+  });
+
   it("rejects input that is not an object with a categories list", () => {
     expect(() => validateManifest({ tools: [] })).toThrow(
       /manifest must contain a categories list/i,
