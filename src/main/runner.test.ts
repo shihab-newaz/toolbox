@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { Tool } from "../shared/types";
-import { POWERSHELL, runTool, type RunEvent, type Shell } from "./runner";
+import type { OutputEvent } from "../shared/types";
+import { POWERSHELL, runTool, type Shell } from "./runner";
 
 // Node stands in for the shell, so each "command" below is a line of JavaScript.
 const nodeShell: Shell = { file: process.execPath, args: ["-e"] };
@@ -14,14 +15,14 @@ const toolOf = (...commands: string[]): Tool => ({
 });
 
 async function run(tool: Tool) {
-  const events: Array<RunEvent & { at: number }> = [];
+  const events: Array<OutputEvent & { at: number }> = [];
   const result = await runTool(tool, nodeShell, (e) =>
     events.push({ ...e, at: Date.now() }),
   );
   return { result, events };
 }
 
-const outputText = (events: RunEvent[], stream: "stdout" | "stderr") =>
+const outputText = (events: OutputEvent[], stream: "stdout" | "stderr") =>
   events
     .filter((e) => e.type === "output" && e.stream === stream)
     .map((e) => (e.type === "output" ? e.text : ""))
@@ -115,7 +116,7 @@ describe("runTool", () => {
   });
 
   it("delivers non-ASCII PowerShell output intact", async () => {
-    const events: RunEvent[] = [];
+    const events: OutputEvent[] = [];
     await runTool(toolOf("Write-Output 'héllo wörld'"), POWERSHELL, (e) => events.push(e));
 
     expect(outputText(events, "stdout")).toContain("héllo wörld");

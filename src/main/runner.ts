@@ -8,8 +8,6 @@ export interface Shell {
   wrapCommand?: (command: string) => string;
 }
 
-export type RunEvent = OutputEvent;
-
 export const POWERSHELL: Shell = {
   file: "powershell.exe",
   args: ["-NoProfile", "-NonInteractive", "-Command"],
@@ -23,7 +21,7 @@ export const POWERSHELL: Shell = {
 function runCommand(
   command: string,
   shell: Shell,
-  onEvent: (event: RunEvent) => void,
+  onEvent: (event: OutputEvent) => void,
 ): Promise<{ exitCode: number | null; error?: string }> {
   return new Promise((resolve) => {
     const child = spawn(shell.file, [...shell.args, shell.wrapCommand?.(command) ?? command], {
@@ -47,7 +45,7 @@ function runCommand(
 export async function runTool(
   tool: Tool,
   shell: Shell,
-  onEvent: (event: RunEvent) => void,
+  onEvent: (event: OutputEvent) => void,
 ): Promise<RunResult> {
   for (const [index, step] of tool.steps.entries()) {
     if (step.kind === "pause") {

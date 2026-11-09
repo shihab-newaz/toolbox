@@ -1,6 +1,4 @@
-import type { Manifest, RiskLevel } from "./types";
-
-const RISK_LEVELS: readonly RiskLevel[] = ["read-only", "normal", "high"];
+import { RISK_LEVELS, type Manifest } from "./types";
 
 export function validateManifest(input: unknown): Manifest {
   if (

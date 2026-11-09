@@ -1,4 +1,6 @@
-export type RiskLevel = "read-only" | "normal" | "high";
+export const RISK_LEVELS = ["read-only", "normal", "high"] as const;
+
+export type RiskLevel = (typeof RISK_LEVELS)[number];
 
 export type Step =
   | { kind: "command"; command: string }
