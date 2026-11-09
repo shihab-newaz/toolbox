@@ -5,7 +5,9 @@ import { validateManifest } from "../shared/validateManifest";
 import { isElevated, relaunchElevated } from "./elevation";
 import { POWERSHELL, runTool } from "./runner";
 
-const skipElevation = process.argv.includes("--no-elevate");
+// `--elevated` marks the copy we relaunched through UAC, so it never relaunches again.
+const skipElevation =
+  process.argv.includes("--no-elevate") || process.argv.includes("--elevated");
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -46,7 +48,7 @@ function registerIpc(): void {
 app.whenReady().then(() => {
   if (!skipElevation && !isElevated()) {
     // Ask Windows for administrator rights once, then let the elevated copy take over.
-    relaunchElevated(process.execPath, [app.getAppPath()]);
+    relaunchElevated(process.execPath, [app.getAppPath(), "--elevated"]);
     app.quit();
     return;
   }
