@@ -34,7 +34,17 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
 
   async function run(toolId: string) {
     setRuns((prev) => ({ ...prev, [toolId]: { output: [], result: null } }));
-    const result = await bridge.runTool(toolId);
+    let result: RunResult;
+    try {
+      result = await bridge.runTool(toolId);
+    } catch (err) {
+      result = {
+        ok: false,
+        failedStep: null,
+        exitCode: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
     setRuns((prev) => ({
       ...prev,
       [toolId]: { output: prev[toolId]?.output ?? [], result },
@@ -60,7 +70,10 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
                   <span>{tool.name}</span>
                   <button
                     onClick={() => run(tool.id)}
-                    disabled={tool.risk !== "read-only"}
+                    disabled={
+                      tool.risk !== "read-only" ||
+                      (state !== undefined && state.result === null)
+                    }
                   >
                     Run
                   </button>

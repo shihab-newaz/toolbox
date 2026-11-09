@@ -81,6 +81,49 @@ describe("App", () => {
     expect(screen.getByText(/finished/i)).toBeTruthy();
   });
 
+  it("ignores a second Run of a Tool that is already running, and re-enables Run when it ends", async () => {
+    let finish!: (r: RunResult) => void;
+    let started = 0;
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
+      {
+        runTool: () => {
+          started += 1;
+          return new Promise<RunResult>((resolve) => (finish = resolve));
+        },
+      },
+    );
+    render(<App bridge={bridge} />);
+
+    const row = (await screen.findByText("Free-space check")).closest("li")!;
+    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    fireEvent.click(button);
+    fireEvent.click(button);
+
+    expect(started).toBe(1);
+    expect(button.disabled).toBe(true);
+
+    await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
+    expect(button.disabled).toBe(false);
+  });
+
+  it("shows a Failed result and re-enables Run when the call to run the Tool itself fails", async () => {
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
+      { runTool: async () => { throw new Error("IPC channel closed"); } },
+    );
+    render(<App bridge={bridge} />);
+
+    const row = (await screen.findByText("Free-space check")).closest("li")!;
+    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    fireEvent.click(button);
+
+    expect(await screen.findByText(/failed/i)).toBeTruthy();
+    expect(screen.getByText(/ipc channel closed/i)).toBeTruthy();
+    expect(screen.queryByText(/exit code/i)).toBeNull();
+    expect(button.disabled).toBe(false);
+  });
+
   it("clears the previous output when a Tool is run again", async () => {
     let runs = 0;
     let emitOutput!: (toolId: string, text: string) => void;
