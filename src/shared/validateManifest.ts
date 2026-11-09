@@ -11,10 +11,16 @@ export function validateManifest(input: unknown): Manifest {
   const manifest = input as Manifest;
   const seenIds = new Set<string>();
   for (const category of manifest.categories) {
+    if (typeof category !== "object" || category === null) {
+      throw new Error("Manifest has a category that is not an object");
+    }
     if (!Array.isArray(category.tools)) {
       throw new Error(`Category "${category.id}" must have a tools list`);
     }
     for (const tool of category.tools) {
+      if (typeof tool !== "object" || tool === null) {
+        throw new Error(`Category "${category.id}" has a tool that is not an object`);
+      }
       if (seenIds.has(tool.id)) {
         throw new Error(`Tool id "${tool.id}" is used more than once`);
       }

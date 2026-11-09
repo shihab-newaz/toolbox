@@ -31,7 +31,9 @@ function quoteWindowsArg(arg: string): string {
   return quoted + "\\".repeat(backslashes * 2) + '"';
 }
 
-const psQuote = (s: string) => `'${s.replace(/'/g, "''")}'`;
+// PowerShell treats the typographic quotes U+2018, U+2019, U+201A and U+201B as
+// single quotes too; each one inside a single-quoted string must be doubled.
+const psQuote = (s: string) => `'${s.replace(/['‘’‚‛]/g, (c) => c + c)}'`;
 
 /**
  * The PowerShell command that starts `exePath` with `args`. Start-Process joins
@@ -79,5 +81,5 @@ export async function relaunchElevated(
   );
   if (exitCode === 0) return { ok: true };
   const reason = error ?? `PowerShell exited with code ${exitCode}`;
-  return { ok: false, error: `Administrator rights were not granted: ${reason}` };
+  return { ok: false, error: `Could not relaunch with administrator rights: ${reason}` };
 }

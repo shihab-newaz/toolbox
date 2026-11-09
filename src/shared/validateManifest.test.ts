@@ -106,6 +106,18 @@ describe("validateManifest", () => {
     );
   });
 
+  it("rejects a Category that is not an object, with a Manifest message instead of a TypeError", () => {
+    expect(() => validateManifest({ categories: [null] })).toThrow(
+      /manifest has a category that is not an object/i,
+    );
+  });
+
+  it("rejects a Tool that is not an object, with a Manifest message instead of a TypeError", () => {
+    expect(() => validateManifest(manifestWith(null))).toThrow(
+      /category "disk" has a tool that is not an object/i,
+    );
+  });
+
   it("rejects input that is not an object with a categories list", () => {
     expect(() => validateManifest({ tools: [] })).toThrow(
       /manifest must contain a categories list/i,
