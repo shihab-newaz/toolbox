@@ -85,19 +85,23 @@ describe("run service", () => {
     const service = createRunService({
       getManifest: () =>
         manifestOf(
-          tool("one", 'console.log("one"); setTimeout(() => {}, 400)'),
+          tool("one", 'console.log("one"); setTimeout(() => {}, 1500)'),
           tool("two", 'console.log("two")'),
         ),
       shell: nodeShell,
     });
-    const events: OutputEvent[] = [];
+    const stamped: Array<{ text: string; at: number }> = [];
+    const onOutput = (e: OutputEvent) => stamped.push({ text: e.text, at: Date.now() });
 
-    const [a, b] = await Promise.all([
-      service.run("one", (e) => events.push(e)),
-      service.run("two", (e) => events.push(e)),
-    ]);
+    const startedAt = Date.now();
+    const one = service.run("one", onOutput).then((result) => ({ result, doneAt: Date.now() }));
+    const two = await service.run("two", onOutput);
+    const { result, doneAt } = await one;
 
-    expect(a.ok).toBe(true);
-    expect(b.ok).toBe(true);
+    expect(result.ok).toBe(true);
+    expect(two.ok).toBe(true);
+    // "two" printed long before the 1.5 s "one" finished, so it did not wait its turn.
+    const twoPrintedAt = stamped.find((e) => e.text.includes("two"))!.at;
+    expect(twoPrintedAt - startedAt).toBeLessThan(doneAt - startedAt - 500);
   }, 10000);
 });

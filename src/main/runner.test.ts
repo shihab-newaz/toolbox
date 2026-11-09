@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
-import type { Tool } from "../shared/types";
-import type { OutputEvent } from "../shared/types";
+import type { OutputEvent, Tool } from "../shared/types";
 import { killAllRunning, POWERSHELL, runningCommandCount, runTool, type Shell } from "./runner";
 
 // Node stands in for the shell, so each "command" below is a line of JavaScript.
