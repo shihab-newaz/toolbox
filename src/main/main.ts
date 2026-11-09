@@ -1,9 +1,10 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import path from "node:path";
 import { manifest } from "../shared/manifest";
 import { validateManifest } from "../shared/validateManifest";
 import { isElevated, relaunchElevated } from "./elevation";
-import { POWERSHELL, runTool } from "./runner";
+import { killAllRunning, POWERSHELL } from "./runner";
+import { createRunService } from "./runService";
 
 // `--elevated` marks the copy we relaunched through UAC, so it never relaunches again.
 const skipElevation =
@@ -25,35 +26,38 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  const runService = createRunService({
+    getManifest: () => validateManifest(manifest),
+    shell: POWERSHELL,
+  });
+
   ipcMain.handle("manifest:get", () => validateManifest(manifest));
 
-  ipcMain.handle("tool:run", async (event, toolId: string) => {
-    const tool = validateManifest(manifest)
-      .categories.flatMap((c) => c.tools)
-      .find((t) => t.id === toolId);
-    if (!tool) {
-      return {
-        ok: false,
-        failedStep: null,
-        exitCode: null,
-        error: `Unknown tool "${toolId}"`,
-      };
-    }
-    return runTool(tool, POWERSHELL, (output) =>
-      event.sender.send("tool:output", toolId, output),
-    );
-  });
+  ipcMain.handle("tool:run", (event, toolId: string) =>
+    runService.run(toolId, (output) => {
+      // The window may have been closed while the command was still printing.
+      if (!event.sender.isDestroyed()) {
+        event.sender.send("tool:output", toolId, output);
+      }
+    }),
+  );
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
   if (!skipElevation && !isElevated()) {
     // Ask Windows for administrator rights once, then let the elevated copy take over.
-    relaunchElevated(process.execPath, [app.getAppPath(), "--elevated"]);
+    const relaunch = await relaunchElevated(process.execPath, [app.getAppPath(), "--elevated"]);
+    if (!relaunch.ok) {
+      dialog.showErrorBox("Toolbox needs administrator rights", relaunch.error);
+    }
     app.quit();
     return;
   }
   registerIpc();
   createWindow();
 });
+
+// Closing the window must not leave elevated PowerShell commands running.
+app.on("before-quit", () => killAllRunning());
 
 app.on("window-all-closed", () => app.quit());
