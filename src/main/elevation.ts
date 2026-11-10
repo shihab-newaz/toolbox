@@ -68,6 +68,19 @@ function runPowerShell(command: string): Promise<ExecuteResult> {
 }
 
 /**
+ * PowerShell's error text is the reason on its first line, followed by line numbers,
+ * a caret underline and category fields. Keep the reason, without its
+ * "Start-Process :" and "This command cannot be run due to the error:" prefixes.
+ */
+function firstLineOfReason(error: string): string {
+  const first = error.split(/\r?\n/).find((line) => line.trim() !== "") ?? error;
+  return first
+    .replace(/^Start-Process\s*:\s*/, "")
+    .replace(/^This command cannot be run due to the error:\s*/, "")
+    .trim();
+}
+
+/**
  * Starts this same app again through a UAC prompt and reports whether Windows
  * accepted it. Declining the prompt makes PowerShell exit non-zero.
  */
@@ -80,6 +93,6 @@ export async function relaunchElevated(
     buildStartProcessCommand(exePath, args, { runAs: true }),
   );
   if (exitCode === 0) return { ok: true };
-  const reason = error ?? `PowerShell exited with code ${exitCode}`;
+  const reason = error ? firstLineOfReason(error) : `PowerShell exited with code ${exitCode}`;
   return { ok: false, error: `Could not relaunch with administrator rights: ${reason}` };
 }

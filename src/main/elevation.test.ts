@@ -119,6 +119,24 @@ describe("relaunchElevated", () => {
     expect(result).toMatchObject({ error: expect.stringMatching(/administrator rights.*canceled by the user/is) });
   });
 
+  it("shows only the reason from PowerShell's error, not its line numbers and category text", async () => {
+    const raw = [
+      "Start-Process : This command cannot be run due to the error: The operation was canceled by the user.",
+      "At line:1 char:1",
+      "+ Start-Process -FilePath 'C:\\Projects\\toolbox\\node_modules\\electron\\di ...",
+      "+ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~",
+      "    + CategoryInfo          : InvalidOperation: (:) [Start-Process], InvalidOperationException",
+      "    + FullyQualifiedErrorId : InvalidOperationException,Microsoft.PowerShell.Commands.StartProcessCommand",
+    ].join("\r\n");
+
+    const result = await relaunchElevated("app.exe", ["x"], async () => ({ exitCode: 1, error: raw }));
+
+    expect(result).toEqual({
+      ok: false,
+      error: "Could not relaunch with administrator rights: The operation was canceled by the user.",
+    });
+  });
+
   it("reports a failure to start PowerShell at all", async () => {
     const result = await relaunchElevated("app.exe", ["x"], async () => ({
       exitCode: null,
