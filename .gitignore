@@ -7,4 +7,6 @@ release/
 .env
 .env.*
 .scratch/
+.claude/handoff/
+.claude/worktrees/
 dist-electron/
