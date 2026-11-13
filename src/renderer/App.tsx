@@ -14,6 +14,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
   const [loadError, setLoadError] = useState<string | null>(null);
   // Counts Runs that have ended, so the log panel knows when to read the Run log again.
   const [endedRuns, setEndedRuns] = useState(0);
+  const [query, setQuery] = useState("");
 
   useEffect(() => {
     bridge
@@ -64,6 +65,15 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
     }));
   }
 
+  const needle = query.trim().toLowerCase();
+  const contains = (text: string) => text.toLowerCase().includes(needle);
+  const visibleCategories = (manifest?.categories ?? [])
+    .map((category) => ({
+      ...category,
+      tools: category.tools.filter((tool) => contains(tool.name) || contains(tool.description)),
+    }))
+    .filter((category) => needle === "" || category.tools.length > 0);
+
   return (
     <main>
       {loadError && (
@@ -72,7 +82,20 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
           <p>{loadError}</p>
         </div>
       )}
-      {manifest?.categories.map((category) => (
+      {manifest && (
+        <input
+          className="search"
+          type="search"
+          aria-label="Search Tools"
+          placeholder="Search Tools"
+          value={query}
+          onChange={(e) => setQuery(e.target.value)}
+        />
+      )}
+      {needle !== "" && visibleCategories.length === 0 && (
+        <p>No Tool matches "{query.trim()}"</p>
+      )}
+      {visibleCategories.map((category) => (
         <section key={category.id}>
           <h2>{category.name}</h2>
           <ul>
