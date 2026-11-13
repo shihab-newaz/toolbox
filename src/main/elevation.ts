@@ -25,7 +25,7 @@ function runWhoami(): WhoamiResult {
 /** The Windows account this process runs as, in `whoami` form: `machine-or-domain\name`. */
 export function currentAccount(execute: () => WhoamiResult = runWhoami): AccountResult {
   const { exitCode, output, error } = execute();
-  const account = output.trim();
+  const account = trimAscii(output);
   if (exitCode === 0 && account !== "") return { ok: true, account };
   const reason = error ?? (exitCode === 0 ? "whoami printed nothing" : `whoami exited with code ${exitCode}`);
   return { ok: false, error: `Could not read the Windows account: ${reason}` };
@@ -43,7 +43,11 @@ export type LaunchDecision =
   | { action: "relaunch"; args: string[] }
   | { action: "refuse"; title: string; message: string };
 
-const sameAccount = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+// The names are whoami's bytes read as latin1, so trim and fold only ASCII: String.trim and
+// toLowerCase would also strip U+00A0 and fold U+00C0-U+00DE, equating two different names.
+const trimAscii = (s: string) => s.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+const foldAscii = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+const sameAccount = (a: string, b: string) => foldAscii(trimAscii(a)) === foldAscii(trimAscii(b));
 
 const refuse = (message: string): LaunchDecision => ({
   action: "refuse",
@@ -73,10 +77,8 @@ export function decideLaunch(
     return { action: "relaunch", args: [ELEVATED_FLAG, STARTED_BY_PREFIX + current.account] };
   }
 
-  const startedBy = argv
-    .find((arg) => arg.startsWith(STARTED_BY_PREFIX))
-    ?.slice(STARTED_BY_PREFIX.length)
-    .trim();
+  const startedByArg = argv.find((arg) => arg.startsWith(STARTED_BY_PREFIX));
+  const startedBy = startedByArg && trimAscii(startedByArg.slice(STARTED_BY_PREFIX.length));
   if (!startedBy) {
     return refuse("Toolbox was not told which Windows account started it. Start Toolbox again.");
   }

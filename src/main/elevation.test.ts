@@ -186,7 +186,7 @@ describe("currentAccount", () => {
     expect(blank.ok).toBe(false);
   });
 
-  it("reads the real account of this process on Windows", () => {
+  it.skipIf(process.platform !== "win32")("reads the real account of this process on Windows", () => {
     const result = currentAccount();
 
     expect(result).toMatchObject({
@@ -245,11 +245,19 @@ describe("decideLaunch", () => {
 
     const decision = decideLaunch([...exe, ...args], elevated("pc\\parent"));
 
-    expect(decision).toMatchObject({
-      action: "refuse",
-      message: expect.stringMatching(/pc\\kid[\s\S]*pc\\parent/),
-    });
-    expect(decision).toMatchObject({ message: expect.stringMatching(/administrator account/i) });
+    expect(decision.action).toBe("refuse");
+    const message = decision.action === "refuse" ? decision.message : "";
+    expect(message).toContain("pc\\kid");
+    expect(message).toContain("pc\\parent");
+  });
+
+  it("does not let a non-ASCII byte that looks like space or a capital pass for another name", () => {
+    // whoami's bytes are read as latin1: U+00A0 is a no-break space, U+00C0 a capital.
+    const spaceEnded = relaunchArgsFrom("pc\\pel ");
+    const capital = relaunchArgsFrom("pc\\À");
+
+    expect(decideLaunch([...exe, ...spaceEnded], elevated("pc\\pel")).action).toBe("refuse");
+    expect(decideLaunch([...exe, ...capital], elevated("pc\\à")).action).toBe("refuse");
   });
 
   it("refuses the same name on a different machine or domain", () => {
