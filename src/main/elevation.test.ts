@@ -3,7 +3,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildStartProcessCommand, relaunchElevated } from "./elevation";
+import { buildStartProcessCommand, currentAccount, relaunchElevated } from "./elevation";
 
 const tempDirs: string[] = [];
 afterEach(() => {
@@ -156,5 +156,36 @@ describe("relaunchElevated", () => {
 
     expect(seen).toContain("-Verb RunAs");
     expect(seen).toContain("toolbox.exe");
+  });
+});
+
+describe("currentAccount", () => {
+  it("reports the account Windows says this process runs as, without the line ending", () => {
+    const result = currentAccount(() => ({ exitCode: 0, output: "desktop-ab12\\mary ann\r\n" }));
+
+    expect(result).toEqual({ ok: true, account: "desktop-ab12\\mary ann" });
+  });
+
+  it("reports a failure when the account cannot be read", () => {
+    const failed = currentAccount(() => ({ exitCode: 1, output: "" }));
+    const notStarted = currentAccount(() => ({
+      exitCode: null,
+      output: "",
+      error: "spawn whoami ENOENT",
+    }));
+    const blank = currentAccount(() => ({ exitCode: 0, output: "\r\n" }));
+
+    expect(failed.ok).toBe(false);
+    expect(notStarted).toMatchObject({ ok: false, error: expect.stringMatching(/ENOENT/) });
+    expect(blank.ok).toBe(false);
+  });
+
+  it("reads the real account of this process on Windows", () => {
+    const result = currentAccount();
+
+    expect(result).toMatchObject({
+      ok: true,
+      account: expect.stringMatching(/^[^\\\r\n]+\\[^\\\r\n]+$/),
+    });
   });
 });

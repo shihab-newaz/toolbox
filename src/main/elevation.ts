@@ -5,6 +5,29 @@ export function isElevated(): boolean {
   return spawnSync("net", ["session"], { windowsHide: true }).status === 0;
 }
 
+export type AccountResult = { ok: true; account: string } | { ok: false; error: string };
+
+export interface WhoamiResult {
+  exitCode: number | null;
+  output: string;
+  error?: string;
+}
+
+function runWhoami(): WhoamiResult {
+  // latin1 keeps every byte apart, so two different names never read as the same text.
+  const run = spawnSync("whoami", [], { windowsHide: true, encoding: "latin1" });
+  return { exitCode: run.status, output: run.stdout ?? "", error: run.error?.message };
+}
+
+/** The Windows account this process runs as, in `whoami` form: `machine-or-domain\name`. */
+export function currentAccount(execute: () => WhoamiResult = runWhoami): AccountResult {
+  const { exitCode, output, error } = execute();
+  const account = output.trim();
+  if (exitCode === 0 && account !== "") return { ok: true, account };
+  const reason = error ?? (exitCode === 0 ? "whoami printed nothing" : `whoami exited with code ${exitCode}`);
+  return { ok: false, error: `Could not read the Windows account: ${reason}` };
+}
+
 export type RelaunchResult = { ok: true } | { ok: false; error: string };
 
 export interface ExecuteResult {
