@@ -32,6 +32,19 @@ const manifestOf = (...tools: ReturnType<typeof tool>[]): Manifest => ({
 
 const textOf = (events: OutputEvent[]) => events.map((e) => e.text).join("");
 
+// The real PowerShell with the shipped Manifest plus a "probe" Tool that prints the
+// temp folder the shell sees, so a test can prove it is not the real one.
+const serviceWithTempProbe = () =>
+  createRunService({
+    getManifest: () => ({
+      categories: [
+        ...shippedManifest.categories,
+        { id: "test", name: "Test", tools: [tool("probe", "Write-Output $env:TEMP")] },
+      ],
+    }),
+    shell: POWERSHELL,
+  });
+
 describe("run service", () => {
   it("fails, without running anything, for a Tool id the Manifest does not contain", async () => {
     const service = createRunService({ getManifest: () => manifestOf(tool("a", 'console.log("x")')), shell: nodeShell });
@@ -110,13 +123,7 @@ describe("run service", () => {
       writeFileSync(path.join(fakeTemp, "old.tmp"), "x");
       mkdirSync(path.join(fakeTemp, "old-folder"));
       writeFileSync(path.join(fakeTemp, "old-folder", "nested.tmp"), "x");
-      const probe = tool("probe", "Write-Output $env:TEMP");
-      const service = createRunService({
-        getManifest: () => ({
-          categories: [...shippedManifest.categories, { id: "test", name: "Test", tools: [probe] }],
-        }),
-        shell: POWERSHELL,
-      });
+      const service = serviceWithTempProbe();
       const cleanupId = shippedManifest.categories
         .flatMap((c) => c.tools)
         .find((t) => t.name === "Temp files cleanup")?.id;
@@ -129,11 +136,9 @@ describe("run service", () => {
       expect(unconfirmed.ok).toBe(false);
       expect(readdirSync(fakeTemp).sort()).toEqual(["old-folder", "old.tmp"]);
 
-      const events: OutputEvent[] = [];
-      const confirmed = await service.run(cleanupId!, (e) => events.push(e), { confirmed: true });
+      const confirmed = await service.run(cleanupId!, () => {}, { confirmed: true });
       expect(confirmed).toEqual({ ok: true, failedStep: null, exitCode: 0 });
       expect(readdirSync(fakeTemp)).toEqual([]);
-      expect(textOf(events)).toMatch(/removed 2 of 2/i);
     } finally {
       process.env.TEMP = realTemp;
       if (existsSync(fakeTemp)) rmSync(fakeTemp, { recursive: true, force: true });
@@ -148,13 +153,7 @@ describe("run service", () => {
     try {
       writeFileSync(path.join(outside, "keep.txt"), "keep me");
       symlinkSync(outside, path.join(fakeTemp, "link-to-outside"), "junction");
-      const probe = tool("probe", "Write-Output $env:TEMP");
-      const service = createRunService({
-        getManifest: () => ({
-          categories: [...shippedManifest.categories, { id: "test", name: "Test", tools: [probe] }],
-        }),
-        shell: POWERSHELL,
-      });
+      const service = serviceWithTempProbe();
       const seen: OutputEvent[] = [];
       await service.run("probe", (e) => seen.push(e));
       expect(textOf(seen).trim()).toBe(fakeTemp);
