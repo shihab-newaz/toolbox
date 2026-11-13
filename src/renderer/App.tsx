@@ -35,13 +35,16 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
   // A ref, not state: two clicks before React re-renders must not both start the Tool.
   const inFlight = useRef(new Set<string>());
 
-  async function run(toolId: string) {
+  // The id of the Tool whose confirmation is open, if any.
+  const [confirming, setConfirming] = useState<string | null>(null);
+
+  async function run(toolId: string, confirmed: boolean) {
     if (inFlight.current.has(toolId)) return;
     inFlight.current.add(toolId);
     setRuns((prev) => ({ ...prev, [toolId]: { output: [], result: null } }));
     let result: RunResult;
     try {
-      result = await bridge.runTool(toolId, false);
+      result = await bridge.runTool(toolId, confirmed);
     } catch (err) {
       result = {
         ok: false,
@@ -75,16 +78,38 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
                 <li key={tool.id}>
                   <span>{tool.name}</span>
                   <button
-                    onClick={() => run(tool.id)}
-                    disabled={
-                      tool.risk !== "read-only" ||
-                      (state !== undefined && state.result === null)
+                    onClick={() =>
+                      tool.risk === "read-only" ? run(tool.id, false) : setConfirming(tool.id)
                     }
+                    disabled={state !== undefined && state.result === null}
                   >
                     Run
                   </button>
                   <p className="meta">{tool.description}</p>
                   <p className="meta">Risk: {tool.risk}</p>
+                  {confirming === tool.id && (
+                    <div role="dialog" aria-label={`Confirm ${tool.name}`} className="confirm">
+                      <p>Running this Tool will execute:</p>
+                      {tool.steps.map((step, index) =>
+                        step.kind === "command" ? (
+                          <pre key={index}>{step.command}</pre>
+                        ) : (
+                          <p key={index}>Pause: {step.message}</p>
+                        ),
+                      )}
+                      <button
+                        onClick={() => {
+                          setConfirming(null);
+                          run(tool.id, true);
+                        }}
+                      >
+                        Confirm
+                      </button>
+                      <button className="secondary" onClick={() => setConfirming(null)}>
+                        Cancel
+                      </button>
+                    </div>
+                  )}
                   {state && (
                     <>
                       <pre>{state.output.map((e) => e.text).join("")}</pre>

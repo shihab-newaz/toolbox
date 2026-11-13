@@ -75,14 +75,14 @@ describe("App", () => {
     }
   });
 
-  it("runs a read-only Tool, shows its output as it arrives, then its result", async () => {
+  it("runs a read-only Tool at once with no confirmation, shows its output as it arrives, then its result", async () => {
     let finish!: (r: RunResult) => void;
-    const ran: string[] = [];
+    const ran: Array<[string, boolean]> = [];
     const { bridge, emit } = fakeBridge(
       { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
       {
-        runTool: (toolId) => {
-          ran.push(toolId);
+        runTool: (toolId, confirmed) => {
+          ran.push([toolId, confirmed]);
           return new Promise<RunResult>((resolve) => (finish = resolve));
         },
       },
@@ -92,7 +92,9 @@ describe("App", () => {
     const row = (await screen.findByText("Free-space check")).closest("li")!;
     fireEvent.click(within(row).getByRole("button", { name: "Run" }));
 
-    expect(ran).toEqual(["space"]);
+    // Nothing was confirmed, and the request says so.
+    expect(ran).toEqual([["space", false]]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     act(() => emit("space", "239.2 GB free\n"));
     expect(await screen.findByText(/239\.2 GB free/)).toBeTruthy();
     act(() => emit("space", "second chunk\n"));
@@ -219,23 +221,111 @@ describe("App", () => {
     expect(screen.queryByText(/finished/i)).toBeNull();
   });
 
-  it("does not offer Run for a Tool that is not read-only until confirmation exists", async () => {
+  it.each(["normal", "high"] as const)(
+    "shows every command of every Step of a %s Tool and runs it only once that is confirmed",
+    async (risk) => {
+      const ran: Array<[string, boolean]> = [];
+      const { bridge } = fakeBridge(
+        {
+          categories: [
+            {
+              id: "c",
+              name: "Cleanup",
+              tools: [
+                {
+                  ...tool("temp", "Clear temp", risk),
+                  steps: [
+                    { kind: "command", command: "Remove-Item first-thing" },
+                    { kind: "command", command: "Remove-Item second-thing" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          runTool: async (toolId, confirmed) => {
+            ran.push([toolId, confirmed]);
+            return { ok: true, failedStep: null, exitCode: 0 };
+          },
+        },
+      );
+      render(<App bridge={bridge} />);
+
+      const row = (await screen.findByText("Clear temp")).closest("li")!;
+      expect(within(row).queryByRole("dialog")).toBeNull();
+      fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+
+      const confirmation = within(row).getByRole("dialog");
+      expect(within(confirmation).getByText("Remove-Item first-thing")).toBeTruthy();
+      expect(within(confirmation).getByText("Remove-Item second-thing")).toBeTruthy();
+      expect(ran).toEqual([]);
+
+      fireEvent.click(within(confirmation).getByRole("button", { name: "Confirm" }));
+
+      expect(ran).toEqual([["temp", true]]);
+      expect(within(row).queryByRole("dialog")).toBeNull();
+      expect(await within(row).findByText(/finished/i)).toBeTruthy();
+    },
+  );
+
+  it("runs nothing when the confirmation is cancelled, and Run can be chosen again", async () => {
+    let started = 0;
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Cleanup", tools: [tool("temp", "Clear temp", "normal")] }] },
+      {
+        runTool: async () => {
+          started += 1;
+          return { ok: true, failedStep: null, exitCode: 0 };
+        },
+      },
+    );
+    render(<App bridge={bridge} />);
+
+    const row = (await screen.findByText("Clear temp")).closest("li")!;
+    const run = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    fireEvent.click(run);
+    fireEvent.click(within(row).getByRole("button", { name: "Cancel" }));
+
+    expect(within(row).queryByRole("dialog")).toBeNull();
+    expect(started).toBe(0);
+    expect(within(row).queryByText(/finished|failed/i)).toBeNull();
+    expect(run.disabled).toBe(false);
+
+    fireEvent.click(run);
+    expect(within(row).getByRole("dialog")).toBeTruthy();
+    expect(started).toBe(0);
+  });
+
+  it("confirms one Tool at a time, and shows a pause Step's message in order with the commands", async () => {
     const { bridge } = fakeBridge({
       categories: [
         {
           id: "c",
-          name: "Cleanup",
-          tools: [tool("temp", "Clear temp", "normal"), tool("hib", "Disable hibernation", "high")],
+          name: "Developer",
+          tools: [
+            {
+              ...tool("shrink", "Docker shrink", "normal"),
+              steps: [
+                { kind: "command", command: "docker system prune" },
+                { kind: "pause", message: "Quit Docker Desktop, then continue" },
+                { kind: "command", command: "Optimize-VHD disk" },
+              ],
+            },
+            tool("npm", "Clear npm cache", "normal"),
+          ],
         },
       ],
     });
     render(<App bridge={bridge} />);
 
-    for (const name of ["Clear temp", "Disable hibernation"]) {
-      const row = (await screen.findByText(name)).closest("li")!;
-      const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
-      expect(button.disabled).toBe(true);
-    }
+    const row = (await screen.findByText("Docker shrink")).closest("li")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(within(row).getByRole("dialog").textContent).toMatch(
+      /docker system prune[\s\S]*Quit Docker Desktop, then continue[\s\S]*Optimize-VHD disk/,
+    );
   });
 
   it("shows a message when the Manifest cannot be loaded", async () => {
