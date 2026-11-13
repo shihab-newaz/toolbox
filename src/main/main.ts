@@ -36,13 +36,17 @@ function registerIpc(): void {
 
   ipcMain.handle("runlog:get", () => runService.getRunLog());
 
-  ipcMain.handle("tool:run", (event, toolId: string) =>
-    runService.run(toolId, (output) => {
-      // The window may have been closed while the command was still printing.
-      if (!event.sender.isDestroyed()) {
-        event.sender.send("tool:output", toolId, output);
-      }
-    }),
+  ipcMain.handle("tool:run", (event, toolId: string, confirmed: boolean) =>
+    runService.run(
+      toolId,
+      (output) => {
+        // The window may have been closed while the command was still printing.
+        if (!event.sender.isDestroyed()) {
+          event.sender.send("tool:output", toolId, output);
+        }
+      },
+      { confirmed },
+    ),
   );
 }
 

@@ -23,6 +23,21 @@ export const manifest: Manifest = {
             },
           ],
         },
+        {
+          id: "temp-files-cleanup",
+          name: "Temp files cleanup",
+          description:
+            "Deletes everything in your temp folder (%TEMP%). Files that are in use are skipped.",
+          risk: "normal",
+          steps: [
+            {
+              kind: "command",
+              // Files held open by a running program cannot be deleted; they are skipped, not an error.
+              command:
+                "$before = @(Get-ChildItem -LiteralPath $env:TEMP -Force).Count; Get-ChildItem -LiteralPath $env:TEMP -Force | Remove-Item -Recurse -Force -ErrorAction SilentlyContinue; $left = @(Get-ChildItem -LiteralPath $env:TEMP -Force).Count; \"Removed $($before - $left) of $before items from $env:TEMP ($left in use, skipped)\"",
+            },
+          ],
+        },
       ],
     },
   ],

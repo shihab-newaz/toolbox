@@ -66,6 +66,14 @@ describe("validateManifest", () => {
     expect(tools.find((t) => t.id === "free-space-check")?.risk).toBe("read-only");
   });
 
+  it("ships a normal Temp files cleanup Tool in the Disk cleanup Category", () => {
+    const diskCleanup = validateManifest(shippedManifest).categories.find(
+      (c) => c.name === "Disk cleanup",
+    );
+
+    expect(diskCleanup?.tools.find((t) => t.name === "Temp files cleanup")?.risk).toBe("normal");
+  });
+
   it("rejects a Category that has no tools list, with a Manifest message instead of a TypeError", () => {
     const manifest = { categories: [{ id: "disk", name: "Disk" }] };
 

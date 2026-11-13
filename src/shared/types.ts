@@ -55,7 +55,11 @@ export interface RunLogEntry {
 /** What the renderer may ask of the main process. */
 export interface ToolboxBridge {
   getManifest(): Promise<Manifest>;
-  runTool(toolId: string): Promise<RunResult>;
+  /**
+   * `confirmed` says the user approved this Run after seeing its commands. The main
+   * process refuses a normal or high Tool without it.
+   */
+  runTool(toolId: string, confirmed: boolean): Promise<RunResult>;
   /** The Run log, newest Run first. */
   getRunLog(): Promise<RunLogEntry[]>;
   /** Subscribe to live output of any running Tool; returns an unsubscribe function. */
