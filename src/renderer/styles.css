@@ -38,6 +38,17 @@ main {
   padding: 24px 16px 48px;
 }
 
+.search {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+}
+
 h2 {
   font-size: 12px;
   letter-spacing: 0.08em;
@@ -80,6 +91,10 @@ li > p {
   font-size: 12px;
 }
 
+.versions {
+  margin: 28px 0 0;
+}
+
 button {
   background: var(--accent);
   color: var(--accent-text);
@@ -119,4 +134,32 @@ pre:empty {
 
 [role="alert"] p {
   margin: 0;
+}
+
+/* A long output scrolls inside its entry, so 200 Runs stay browsable. */
+.run-log pre {
+  max-height: 240px;
+  overflow-y: auto;
+}
+
+.confirm {
+  grid-column: 1 / -1;
+  border-top: 1px solid var(--border);
+  margin-top: 6px;
+  padding-top: 8px;
+}
+
+.confirm p,
+.confirm pre {
+  margin: 0 0 8px;
+}
+
+.confirm button + button {
+  margin-left: 8px;
+}
+
+button.secondary {
+  background: transparent;
+  color: var(--text);
+  border: 1px solid var(--border);
 }

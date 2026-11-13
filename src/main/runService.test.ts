@@ -1,6 +1,18 @@
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readdirSync,
+  rmSync,
+  symlinkSync,
+  writeFileSync,
+} from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
+import { manifest as shippedManifest } from "../shared/manifest";
 import type { Manifest, OutputEvent, RiskLevel } from "../shared/types";
-import type { Shell } from "./runner";
+import { POWERSHELL, type Shell } from "./runner";
 import { createRunService } from "./runService";
 
 // Node stands in for the shell, so each "command" below is a line of JavaScript.
@@ -19,6 +31,19 @@ const manifestOf = (...tools: ReturnType<typeof tool>[]): Manifest => ({
 });
 
 const textOf = (events: OutputEvent[]) => events.map((e) => e.text).join("");
+
+// The real PowerShell with the shipped Manifest plus a "probe" Tool that prints the
+// temp folder the shell sees, so a test can prove it is not the real one.
+const serviceWithTempProbe = () =>
+  createRunService({
+    getManifest: () => ({
+      categories: [
+        ...shippedManifest.categories,
+        { id: "test", name: "Test", tools: [tool("probe", "Write-Output $env:TEMP")] },
+      ],
+    }),
+    shell: POWERSHELL,
+  });
 
 describe("run service", () => {
   it("fails, without running anything, for a Tool id the Manifest does not contain", async () => {
@@ -43,7 +68,7 @@ describe("run service", () => {
   });
 
   it.each(["normal", "high"] as const)(
-    "refuses a %s-risk Tool without running it, because only read-only Tools may run until confirmation exists",
+    "refuses a %s Tool whose Run was not confirmed, without running it",
     async (risk) => {
       const service = createRunService({
         getManifest: () => manifestOf(tool("risky", 'console.log("ran anyway")', risk)),
@@ -54,10 +79,96 @@ describe("run service", () => {
       const result = await service.run("risky", (e) => events.push(e));
 
       expect(result.ok).toBe(false);
-      expect(result.error).toMatch(/read-only/i);
+      expect(result.error).toMatch(/not confirmed/i);
       expect(events).toEqual([]);
     },
   );
+
+  it.each(["normal", "high"] as const)("runs a %s Tool whose Run was confirmed", async (risk) => {
+    const service = createRunService({
+      getManifest: () => manifestOf(tool("risky", 'console.log("ran")', risk)),
+      shell: nodeShell,
+    });
+    const events: OutputEvent[] = [];
+
+    const result = await service.run("risky", (e) => events.push(e), { confirmed: true });
+
+    expect(result).toEqual({ ok: true, failedStep: null, exitCode: 0 });
+    expect(textOf(events)).toContain("ran");
+  });
+
+  it("refuses a normal Tool when the confirmation is anything but an explicit yes", async () => {
+    const service = createRunService({
+      getManifest: () => manifestOf(tool("risky", 'console.log("ran anyway")', "normal")),
+      shell: nodeShell,
+    });
+    const events: OutputEvent[] = [];
+
+    // What a stray call from the window could send instead of `true`.
+    const result = await service.run("risky", (e) => events.push(e), {
+      confirmed: "yes" as unknown as boolean,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/not confirmed/i);
+    expect(events).toEqual([]);
+  });
+
+  it("empties the temp folder with the shipped Temp files cleanup, but only once its Run is confirmed", async () => {
+    // A stand-in temp folder: the real one must not be touched by a test.
+    const fakeTemp = mkdtempSync(path.join(tmpdir(), "toolbox-fake-temp-"));
+    const realTemp = process.env.TEMP;
+    process.env.TEMP = fakeTemp;
+    try {
+      writeFileSync(path.join(fakeTemp, "old.tmp"), "x");
+      mkdirSync(path.join(fakeTemp, "old-folder"));
+      writeFileSync(path.join(fakeTemp, "old-folder", "nested.tmp"), "x");
+      const service = serviceWithTempProbe();
+      const cleanupId = shippedManifest.categories
+        .flatMap((c) => c.tools)
+        .find((t) => t.name === "Temp files cleanup")?.id;
+      // Guard: the shell really does see the stand-in folder before anything is deleted.
+      const seen: OutputEvent[] = [];
+      await service.run("probe", (e) => seen.push(e));
+      expect(textOf(seen).trim()).toBe(fakeTemp);
+
+      const unconfirmed = await service.run(cleanupId!, () => {});
+      expect(unconfirmed.ok).toBe(false);
+      expect(readdirSync(fakeTemp).sort()).toEqual(["old-folder", "old.tmp"]);
+
+      const confirmed = await service.run(cleanupId!, () => {}, { confirmed: true });
+      expect(confirmed).toEqual({ ok: true, failedStep: null, exitCode: 0 });
+      expect(readdirSync(fakeTemp)).toEqual([]);
+    } finally {
+      process.env.TEMP = realTemp;
+      if (existsSync(fakeTemp)) rmSync(fakeTemp, { recursive: true, force: true });
+    }
+  }, 30000);
+
+  it("leaves files outside the temp folder alone when the temp folder holds a link to them", async () => {
+    const fakeTemp = mkdtempSync(path.join(tmpdir(), "toolbox-fake-temp-"));
+    const outside = mkdtempSync(path.join(tmpdir(), "toolbox-outside-"));
+    const realTemp = process.env.TEMP;
+    process.env.TEMP = fakeTemp;
+    try {
+      writeFileSync(path.join(outside, "keep.txt"), "keep me");
+      symlinkSync(outside, path.join(fakeTemp, "link-to-outside"), "junction");
+      const service = serviceWithTempProbe();
+      const seen: OutputEvent[] = [];
+      await service.run("probe", (e) => seen.push(e));
+      expect(textOf(seen).trim()).toBe(fakeTemp);
+
+      const result = await service.run("temp-files-cleanup", () => {}, { confirmed: true });
+
+      expect(result.ok).toBe(true);
+      expect(readdirSync(fakeTemp)).toEqual([]);
+      expect(readdirSync(outside)).toEqual(["keep.txt"]);
+    } finally {
+      process.env.TEMP = realTemp;
+      rmSync(fakeTemp, { recursive: true, force: true });
+      rmSync(outside, { recursive: true, force: true });
+    }
+  }, 30000);
 
   it("refuses a second start of a Tool that is still running, and lets it start again afterwards", async () => {
     const service = createRunService({

@@ -1,8 +1,15 @@
-import type { Manifest, OutputEvent, RunResult } from "../shared/types";
+import type { Manifest, OutputEvent, RunLogEntry, RunResult } from "../shared/types";
+import { createRunLog } from "./runLog";
 import { runTool, type Shell } from "./runner";
 
 export interface RunService {
-  run(toolId: string, onOutput: (event: OutputEvent) => void): Promise<RunResult>;
+  run(
+    toolId: string,
+    onOutput: (event: OutputEvent) => void,
+    options?: { confirmed?: boolean },
+  ): Promise<RunResult>;
+  /** Every Run that started and ended, newest first. */
+  getRunLog(): RunLogEntry[];
 }
 
 const refused = (error: string): RunResult => ({
@@ -20,30 +27,47 @@ const refused = (error: string): RunResult => ({
 export function createRunService(options: {
   getManifest: () => Manifest;
   shell: Shell;
+  /** Where the Run log is saved. Without it the log is not kept across restarts. */
+  logFolder?: string;
 }): RunService {
   const running = new Set<string>();
+  const runLog = createRunLog(options.logFolder);
 
   return {
-    async run(toolId, onOutput) {
+    async run(toolId, onOutput, runOptions = {}) {
       const tool = options
         .getManifest()
         .categories.flatMap((category) => category.tools)
         .find((t) => t.id === toolId);
       if (!tool) return refused(`Unknown tool "${toolId}"`);
-      // Until confirmation exists (a later ticket), only Tools that change nothing may run.
-      if (tool.risk !== "read-only") {
-        return refused(
-          `"${tool.name}" is ${tool.risk}; only read-only Tools can run until confirmation exists`,
-        );
+      // Only an explicit `true` counts: the value crosses from the window, which is not trusted.
+      if (tool.risk !== "read-only" && runOptions.confirmed !== true) {
+        return refused(`"${tool.name}" is ${tool.risk} and its Run was not confirmed`);
       }
       if (running.has(toolId)) return refused(`"${tool.name}" is already running`);
 
       running.add(toolId);
+      const startedAt = new Date().toISOString();
+      let output = "";
       try {
-        return await runTool(tool, options.shell, onOutput);
+        const result = await runTool(tool, options.shell, (event) => {
+          output += event.text;
+          onOutput(event);
+        });
+        runLog.add({
+          toolId: tool.id,
+          toolName: tool.name,
+          startedAt,
+          endedAt: new Date().toISOString(),
+          commands: tool.steps.flatMap((step) => (step.kind === "command" ? [step.command] : [])),
+          output,
+          result,
+        });
+        return result;
       } finally {
         running.delete(toolId);
       }
     },
+    getRunLog: () => runLog.entries(),
   };
 }

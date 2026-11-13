@@ -37,10 +37,39 @@ export interface RunResult {
   error?: string;
 }
 
+/** One past Run, as kept in the Run log. */
+export interface RunLogEntry {
+  toolId: string;
+  toolName: string;
+  /** ISO 8601 date and time. */
+  startedAt: string;
+  /** ISO 8601 date and time. */
+  endedAt: string;
+  /** The command of every command Step, in order. */
+  commands: string[];
+  /** Standard output and error output together, in the order they arrived. */
+  output: string;
+  result: RunResult;
+}
+
+export interface VersionInfo {
+  /** The Toolbox's own version. */
+  app: string;
+  /** The Windows version in words, such as "Windows 11 (build 26100)". */
+  windows: string;
+}
+
 /** What the renderer may ask of the main process. */
 export interface ToolboxBridge {
   getManifest(): Promise<Manifest>;
-  runTool(toolId: string): Promise<RunResult>;
+  /**
+   * `confirmed` says the user approved this Run after seeing its commands. The main
+   * process refuses a normal or high Tool without it.
+   */
+  runTool(toolId: string, confirmed: boolean): Promise<RunResult>;
+  /** The Run log, newest Run first. */
+  getRunLog(): Promise<RunLogEntry[]>;
+  getVersions(): Promise<VersionInfo>;
   /** Subscribe to live output of any running Tool; returns an unsubscribe function. */
   onOutput(listener: (toolId: string, event: OutputEvent) => void): () => void;
 }

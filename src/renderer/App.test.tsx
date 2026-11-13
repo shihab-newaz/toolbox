@@ -23,7 +23,9 @@ function fakeBridge(manifest: Manifest, overrides: Partial<ToolboxBridge> = {}) 
   const listeners = new Set<(toolId: string, e: OutputEvent) => void>();
   const bridge: ToolboxBridge = {
     getManifest: async () => manifest,
+    getVersions: async () => ({ app: "0.0.0", windows: "Windows" }),
     runTool: async () => ({ ok: true, failedStep: null, exitCode: 0 }) as RunResult,
+    getRunLog: async () => [],
     onOutput: (l) => {
       listeners.add(l);
       return () => listeners.delete(l);
@@ -75,14 +77,14 @@ describe("App", () => {
     }
   });
 
-  it("runs a read-only Tool, shows its output as it arrives, then its result", async () => {
+  it("runs a read-only Tool at once with no confirmation, shows its output as it arrives, then its result", async () => {
     let finish!: (r: RunResult) => void;
-    const ran: string[] = [];
+    const ran: Array<[string, boolean]> = [];
     const { bridge, emit } = fakeBridge(
       { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
       {
-        runTool: (toolId) => {
-          ran.push(toolId);
+        runTool: (toolId, confirmed) => {
+          ran.push([toolId, confirmed]);
           return new Promise<RunResult>((resolve) => (finish = resolve));
         },
       },
@@ -92,7 +94,9 @@ describe("App", () => {
     const row = (await screen.findByText("Free-space check")).closest("li")!;
     fireEvent.click(within(row).getByRole("button", { name: "Run" }));
 
-    expect(ran).toEqual(["space"]);
+    // Nothing was confirmed, and the request says so.
+    expect(ran).toEqual([["space", false]]);
+    expect(screen.queryByRole("dialog")).toBeNull();
     act(() => emit("space", "239.2 GB free\n"));
     expect(await screen.findByText(/239\.2 GB free/)).toBeTruthy();
     act(() => emit("space", "second chunk\n"));
@@ -219,23 +223,146 @@ describe("App", () => {
     expect(screen.queryByText(/finished/i)).toBeNull();
   });
 
-  it("does not offer Run for a Tool that is not read-only until confirmation exists", async () => {
+  it.each(["normal", "high"] as const)(
+    "shows every command of every Step of a %s Tool and runs it only once that is confirmed",
+    async (risk) => {
+      const ran: Array<[string, boolean]> = [];
+      const { bridge } = fakeBridge(
+        {
+          categories: [
+            {
+              id: "c",
+              name: "Cleanup",
+              tools: [
+                {
+                  ...tool("temp", "Clear temp", risk),
+                  steps: [
+                    { kind: "command", command: "Remove-Item first-thing" },
+                    { kind: "command", command: "Remove-Item second-thing" },
+                  ],
+                },
+              ],
+            },
+          ],
+        },
+        {
+          runTool: async (toolId, confirmed) => {
+            ran.push([toolId, confirmed]);
+            return { ok: true, failedStep: null, exitCode: 0 };
+          },
+        },
+      );
+      render(<App bridge={bridge} />);
+
+      const row = (await screen.findByText("Clear temp")).closest("li")!;
+      expect(within(row).queryByRole("dialog")).toBeNull();
+      fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+
+      const confirmation = within(row).getByRole("dialog");
+      expect(within(confirmation).getByText("Remove-Item first-thing")).toBeTruthy();
+      expect(within(confirmation).getByText("Remove-Item second-thing")).toBeTruthy();
+      expect(ran).toEqual([]);
+
+      fireEvent.click(within(confirmation).getByRole("button", { name: "Confirm" }));
+
+      expect(ran).toEqual([["temp", true]]);
+      expect(within(row).queryByRole("dialog")).toBeNull();
+      expect(await within(row).findByText(/finished/i)).toBeTruthy();
+    },
+  );
+
+  it("runs nothing when the confirmation is cancelled, and Run can be chosen again", async () => {
+    let started = 0;
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Cleanup", tools: [tool("temp", "Clear temp", "normal")] }] },
+      {
+        runTool: async () => {
+          started += 1;
+          return { ok: true, failedStep: null, exitCode: 0 };
+        },
+      },
+    );
+    render(<App bridge={bridge} />);
+
+    const row = (await screen.findByText("Clear temp")).closest("li")!;
+    const run = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    fireEvent.click(run);
+    fireEvent.click(within(row).getByRole("button", { name: "Cancel" }));
+
+    expect(within(row).queryByRole("dialog")).toBeNull();
+    expect(started).toBe(0);
+    expect(within(row).queryByText(/finished|failed/i)).toBeNull();
+    expect(run.disabled).toBe(false);
+
+    fireEvent.click(run);
+    expect(within(row).getByRole("dialog")).toBeTruthy();
+    expect(started).toBe(0);
+  });
+
+  it("confirms one Tool at a time, and shows a pause Step's message in order with the commands", async () => {
     const { bridge } = fakeBridge({
       categories: [
         {
           id: "c",
-          name: "Cleanup",
-          tools: [tool("temp", "Clear temp", "normal"), tool("hib", "Disable hibernation", "high")],
+          name: "Developer",
+          tools: [
+            {
+              ...tool("shrink", "Docker shrink", "normal"),
+              steps: [
+                { kind: "command", command: "docker system prune" },
+                { kind: "pause", message: "Quit Docker Desktop, then continue" },
+                { kind: "command", command: "Optimize-VHD disk" },
+              ],
+            },
+            tool("npm", "Clear npm cache", "normal"),
+          ],
         },
       ],
     });
     render(<App bridge={bridge} />);
 
-    for (const name of ["Clear temp", "Disable hibernation"]) {
-      const row = (await screen.findByText(name)).closest("li")!;
-      const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
-      expect(button.disabled).toBe(true);
-    }
+    const row = (await screen.findByText("Docker shrink")).closest("li")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+
+    expect(screen.getAllByRole("dialog")).toHaveLength(1);
+    expect(within(row).getByRole("dialog").textContent).toMatch(
+      /docker system prune[\s\S]*Quit Docker Desktop, then continue[\s\S]*Optimize-VHD disk/,
+    );
+  });
+
+  it("shows the app version and the Windows version", async () => {
+    const { bridge } = fakeBridge(
+      { categories: [] },
+      { getVersions: async () => ({ app: "4.5.6", windows: "Windows 11 (build 26100)" }) },
+    );
+
+    render(<App bridge={bridge} />);
+
+    expect(await screen.findByText(/Toolbox 4\.5\.6/)).toBeTruthy();
+    expect(screen.getByText(/Windows 11 \(build 26100\)/)).toBeTruthy();
+  });
+
+  it("still lists the Tools when the versions cannot be read", async () => {
+    let rejected: Promise<never> = new Promise(() => undefined);
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Quokka care", tools: [tool("t1", "Feed quokkas")] }] },
+      {
+        getVersions: () => {
+          rejected = Promise.reject(new Error("no versions"));
+          return rejected;
+        },
+      },
+    );
+
+    render(<App bridge={bridge} />);
+
+    expect(await screen.findByText("Feed quokkas")).toBeTruthy();
+    // Let the rejection reach the window before checking that nothing was shown.
+    await act(async () => {
+      await rejected.catch(() => undefined);
+    });
+    expect(screen.queryByText(/Toolbox \d/)).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("shows a message when the Manifest cannot be loaded", async () => {
@@ -247,5 +374,210 @@ describe("App", () => {
 
     expect(await screen.findByText(/could not load the manifest/i)).toBeTruthy();
     expect(screen.getByText(/must contain a categories list/i)).toBeTruthy();
+  });
+});
+
+describe("App search box", () => {
+  const zoo: Manifest = {
+    categories: [
+      {
+        id: "net",
+        name: "Network",
+        tools: [
+          { ...tool("dns", "Flush DNS cache"), description: "Fixes sites that will not load" },
+          { ...tool("wifi", "Show Wi-Fi password"), description: "Reads the saved key of a WLAN network" },
+        ],
+      },
+      {
+        id: "fix",
+        name: "Fix-it",
+        tools: [
+          { ...tool("spool", "Clear print queue"), description: "Unsticks a printer that will not print" },
+          { ...tool("icons", "Rebuild icon cache"), description: "Repairs blank desktop icons" },
+        ],
+      },
+      {
+        id: "disk",
+        name: "Disk cleanup",
+        tools: [{ ...tool("space", "Free-space check"), description: "Reports how full each drive is" }],
+      },
+    ],
+  };
+
+  async function search(text: string) {
+    const box = await screen.findByRole("searchbox", { name: "Search Tools" });
+    fireEvent.change(box, { target: { value: text } });
+  }
+
+  const shownTools = () =>
+    screen.queryAllByRole("listitem").map((row) => row.querySelector("span")!.textContent);
+  const noMatchMessage = /no tool matches/i;
+  const shownCategories = () => screen
+      .queryAllByRole("heading", { level: 2 })
+      .map((h) => h.textContent)
+      // The Run log panel has its own heading; it is not a Category.
+      .filter((name) => name !== "Run log");
+
+  it("shows the matching Tools from every Category, each under its Category name", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("cache");
+
+    expect(shownCategories()).toEqual(["Network", "Fix-it"]);
+    expect(shownTools()).toEqual(["Flush DNS cache", "Rebuild icon cache"]);
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("cache");
+    const network = screen.getByText("Network").closest("section")!;
+    expect(within(network).getByText("Flush DNS cache")).toBeTruthy();
+    const fixIt = screen.getByText("Fix-it").closest("section")!;
+    expect(within(fixIt).getByText("Rebuild icon cache")).toBeTruthy();
+  });
+
+  it("matches a Tool's name whatever the case of the search or the name", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("dns");
+    expect(shownTools()).toEqual(["Flush DNS cache"]);
+
+    await search("FREE-SPACE");
+    expect(shownTools()).toEqual(["Free-space check"]);
+  });
+
+  it("matches a Tool's description as well as its name, ignoring case", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("PRINTER");
+
+    expect(shownCategories()).toEqual(["Fix-it"]);
+    expect(shownTools()).toEqual(["Clear print queue"]);
+
+    await search("wlan");
+
+    expect(shownTools()).toEqual(["Show Wi-Fi password"]);
+  });
+
+  it("says so when no Tool matches the search", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+    await search("cache");
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
+
+    await search("quokka");
+
+    expect(shownCategories()).toEqual([]);
+    expect(shownTools()).toEqual([]);
+    expect(screen.getByText(noMatchMessage).textContent).toContain("quokka");
+  });
+
+  it("ignores spaces around the search, and treats a search of only spaces as empty", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("  printer ");
+    expect(shownTools()).toEqual(["Clear print queue"]);
+
+    await search("  quokka ");
+    expect(screen.getByText(noMatchMessage).textContent).toMatch(/"quokka"/);
+
+    await search("   ");
+    expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup"]);
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
+  });
+
+  it("keeps showing a Category that has no Tools while nothing is searched for", async () => {
+    const { bridge } = fakeBridge({
+      categories: [...zoo.categories, { id: "dev", name: "Developer", tools: [] }],
+    });
+    render(<App bridge={bridge} />);
+
+    await search("");
+    expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup", "Developer"]);
+
+    await search("cache");
+    expect(shownCategories()).toEqual(["Network", "Fix-it"]);
+  });
+
+  it("does not report a failed search for a Manifest with no Categories", async () => {
+    const { bridge } = fakeBridge({ categories: [] });
+    render(<App bridge={bridge} />);
+
+    await screen.findByRole("searchbox");
+
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
+  });
+
+  it("offers no search box when the Manifest cannot be loaded", async () => {
+    const { bridge } = fakeBridge(zoo, { getManifest: async () => { throw new Error("broken"); } });
+    render(<App bridge={bridge} />);
+
+    await screen.findByText(/could not load the manifest/i);
+
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
+  it("restores the full Category list when the search is cleared", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+    await search("quokka");
+
+    await search("");
+
+    expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup"]);
+    expect(shownTools()).toEqual([
+      "Flush DNS cache",
+      "Show Wi-Fi password",
+      "Clear print queue",
+      "Rebuild icon cache",
+      "Free-space check",
+    ]);
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
+  });
+
+  it("runs a Tool found by search the same way as from the Category list", async () => {
+    let finish!: (r: RunResult) => void;
+    const ran: string[] = [];
+    const { bridge, emit } = fakeBridge(zoo, {
+      runTool: (toolId) => {
+        ran.push(toolId);
+        return new Promise<RunResult>((resolve) => (finish = resolve));
+      },
+    });
+    render(<App bridge={bridge} />);
+    await search("printer");
+
+    const row = screen.getByText("Clear print queue").closest("li")!;
+    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    fireEvent.click(button);
+
+    expect(ran).toEqual(["spool"]);
+    expect(button.disabled).toBe(true);
+    act(() => emit("spool", "Spooler stopped\n"));
+    expect(screen.getByText(/Spooler stopped/)).toBeTruthy();
+
+    await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
+    expect(screen.getByText(/finished/i)).toBeTruthy();
+  });
+
+  it("keeps a Tool's output and result when a search hides the Tool and then shows it again", async () => {
+    const { bridge, emit } = fakeBridge(zoo, {
+      runTool: async (toolId) => {
+        emit(toolId, "Spooler stopped\n");
+        return { ok: true, failedStep: null, exitCode: 0 };
+      },
+    });
+    render(<App bridge={bridge} />);
+    const row = (await screen.findByText("Clear print queue")).closest("li")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+    await screen.findByText(/finished/i);
+
+    await search("dns");
+    expect(screen.queryByText(/Spooler stopped/)).toBeNull();
+    await search("");
+
+    const shownAgain = screen.getByText("Clear print queue").closest("li")!;
+    expect(within(shownAgain).getByText(/Spooler stopped/)).toBeTruthy();
+    expect(within(shownAgain).getByText(/finished/i)).toBeTruthy();
   });
 });

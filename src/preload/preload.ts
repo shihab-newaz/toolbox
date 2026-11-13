@@ -3,7 +3,9 @@ import type { OutputEvent, ToolboxBridge } from "../shared/types";
 
 const bridge: ToolboxBridge = {
   getManifest: () => ipcRenderer.invoke("manifest:get"),
-  runTool: (toolId) => ipcRenderer.invoke("tool:run", toolId),
+  getVersions: () => ipcRenderer.invoke("versions:get"),
+  runTool: (toolId, confirmed) => ipcRenderer.invoke("tool:run", toolId, confirmed),
+  getRunLog: () => ipcRenderer.invoke("runlog:get"),
   onOutput: (listener) => {
     const handler = (_: unknown, toolId: string, event: OutputEvent) =>
       listener(toolId, event);

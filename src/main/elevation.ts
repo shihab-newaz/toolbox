@@ -1,8 +1,97 @@
 import { spawn, spawnSync } from "node:child_process";
+import path from "node:path";
 
 /** `net session` succeeds only in an elevated (administrator) process. */
 export function isElevated(): boolean {
   return spawnSync("net", ["session"], { windowsHide: true }).status === 0;
+}
+
+export type AccountResult = { ok: true; account: string } | { ok: false; error: string };
+
+export interface WhoamiResult {
+  exitCode: number | null;
+  output: string;
+  error?: string;
+}
+
+function runWhoami(): WhoamiResult {
+  // latin1 keeps every byte apart, so two different names never read as the same text.
+  // The Windows copy by full path: a `whoami` earlier on PATH (Git Bash) omits the domain.
+  const whoami = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe");
+  const run = spawnSync(whoami, [], { windowsHide: true, encoding: "latin1" });
+  return { exitCode: run.status, output: run.stdout ?? "", error: run.error?.message };
+}
+
+/** The Windows account this process runs as, in `whoami` form: `machine-or-domain\name`. */
+export function currentAccount(execute: () => WhoamiResult = runWhoami): AccountResult {
+  const { exitCode, output, error } = execute();
+  const account = trimAscii(output);
+  if (exitCode === 0 && account !== "") return { ok: true, account };
+  const reason = error ?? (exitCode === 0 ? "whoami printed nothing" : `whoami exited with code ${exitCode}`);
+  return { ok: false, error: `Could not read the Windows account: ${reason}` };
+}
+
+/** Development flag: run unelevated, with no relaunch and no account check. */
+const NO_ELEVATE_FLAG = "--no-elevate";
+/** Marks the copy relaunched through UAC, so it never relaunches again. */
+const ELEVATED_FLAG = "--elevated";
+/** Tells the elevated copy which Windows account started the app. */
+const STARTED_BY_PREFIX = "--started-by=";
+
+export type LaunchDecision =
+  | { action: "open" }
+  | { action: "relaunch"; args: string[] }
+  | { action: "refuse"; title: string; message: string };
+
+// The names are whoami's bytes read as latin1, so trim and fold only ASCII: String.trim and
+// toLowerCase would also strip U+00A0 and fold U+00C0-U+00DE, equating two different names.
+const trimAscii = (s: string) => s.replace(/^[ \t\r\n]+|[ \t\r\n]+$/g, "");
+const foldAscii = (s: string) => s.replace(/[A-Z]/g, (c) => c.toLowerCase());
+const sameAccount = (a: string, b: string) => foldAscii(trimAscii(a)) === foldAscii(trimAscii(b));
+
+const refuse = (message: string): LaunchDecision => ({
+  action: "refuse",
+  title: "Toolbox cannot run from this account",
+  message,
+});
+
+/**
+ * What this copy of the app does at launch: open the window, relaunch through UAC
+ * with `args`, or refuse to run. UAC switches to another account when a standard
+ * user types an administrator's password; the Tools would then act on that other
+ * account's files, so the elevated copy refuses (ADR 0001).
+ */
+export function decideLaunch(
+  argv: string[],
+  system: { isElevated: () => boolean; currentAccount: () => AccountResult } = {
+    isElevated,
+    currentAccount,
+  },
+): LaunchDecision {
+  if (argv.includes(NO_ELEVATE_FLAG)) return { action: "open" };
+
+  if (!argv.includes(ELEVATED_FLAG)) {
+    if (system.isElevated()) return { action: "open" };
+    const current = system.currentAccount();
+    if (!current.ok) return refuse(current.error);
+    return { action: "relaunch", args: [ELEVATED_FLAG, STARTED_BY_PREFIX + current.account] };
+  }
+
+  const startedByArg = argv.find((arg) => arg.startsWith(STARTED_BY_PREFIX));
+  const startedBy = startedByArg && trimAscii(startedByArg.slice(STARTED_BY_PREFIX.length));
+  if (!startedBy) {
+    return refuse("Toolbox was not told which Windows account started it. Start Toolbox again.");
+  }
+  const current = system.currentAccount();
+  if (!current.ok) return refuse(current.error);
+  if (sameAccount(startedBy, current.account)) return { action: "open" };
+  return refuse(
+    `Toolbox was started by the Windows account ${startedBy}, but Windows gave it ` +
+      `administrator rights as ${current.account}. Its Tools would act on that other ` +
+      "account's files, so Toolbox will not run.\n\n" +
+      "Standard accounts are not supported. Sign in to Windows with an administrator account " +
+      "and start Toolbox there.",
+  );
 }
 
 export type RelaunchResult = { ok: true } | { ok: false; error: string };
