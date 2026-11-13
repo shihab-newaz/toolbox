@@ -121,9 +121,9 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
         </section>
       ))}
       {versions && (
-        <footer className="meta">
+        <p className="meta versions">
           Toolbox {versions.app} · {versions.windows}
-        </footer>
+        </p>
       )}
     </main>
   );

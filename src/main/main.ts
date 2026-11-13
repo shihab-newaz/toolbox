@@ -9,8 +9,10 @@ import { createRunService } from "./runService";
 import { getVersionInfo } from "./versionInfo";
 
 // `--elevated` marks the copy we relaunched through UAC, so it never relaunches again.
+// The packaged executable is already started elevated by its own manifest (a single
+// UAC prompt), so it never relaunches itself, even if `net session` fails there.
 const skipElevation =
-  process.argv.includes("--no-elevate") || process.argv.includes("--elevated");
+  app.isPackaged || process.argv.includes("--no-elevate") || process.argv.includes("--elevated");
 
 function createWindow(): void {
   const win = new BrowserWindow({

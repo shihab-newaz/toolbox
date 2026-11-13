@@ -80,8 +80,8 @@ li > p {
   font-size: 12px;
 }
 
-footer {
-  margin-top: 28px;
+.versions {
+  margin: 28px 0 0;
 }
 
 button {
