@@ -174,6 +174,9 @@ describe("Run log panel", () => {
     expect(text).toContain("Renew IP");
     expect(text).toContain(localTime(second.startedAt));
     expect(text).toContain(localTime(second.endedAt));
+    // Exact, zone-free times too, so whoever reads the paste in another time zone can place the Run.
+    expect(text).toContain(second.startedAt);
+    expect(text).toContain(second.endedAt);
     expect(text).toContain("ipconfig /release");
     expect(text).toContain("ipconfig /renew");
     expect(text).toContain("No adapter");

@@ -55,7 +55,11 @@ function save(file: string, entries: RunLogEntry[]): void {
     // A Run that finished must not be reported as failed because its log entry
     // could not be saved; the entry stays listed until the app closes.
     console.error(`Could not save the Run log to ${file}:`, err);
-    fs.rmSync(draft, { force: true });
+    try {
+      fs.rmSync(draft, { force: true });
+    } catch {
+      // Cleaning up is best effort; it must not turn a finished Run into a failed one.
+    }
   }
 }
 

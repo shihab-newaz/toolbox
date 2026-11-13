@@ -185,6 +185,17 @@ describe("Run log", () => {
     expect(serviceIn(folder).getRunLog()).toEqual([good]);
   });
 
+  it("still runs Tools when something in the way stops even the draft of the log from being written", async () => {
+    const folder = tempFolder();
+    fs.mkdirSync(path.join(folder, `${RUN_LOG_FILE}.tmp`));
+
+    const service = serviceIn(folder);
+    const result = await service.run("hello", ignoreOutput);
+
+    expect(result.ok).toBe(true);
+    expect(service.getRunLog().map((entry) => entry.toolId)).toEqual(["hello"]);
+  });
+
   it("starts an empty log and still runs Tools when the saved file cannot be read or written", async () => {
     const folder = tempFolder();
     // A folder where the file should be: reading and writing both fail.

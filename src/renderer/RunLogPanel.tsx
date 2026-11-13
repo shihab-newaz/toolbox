@@ -14,8 +14,8 @@ function resultText({ result }: RunLogEntry): string {
 function entryText(entry: RunLogEntry): string {
   return [
     `Tool: ${entry.toolName}`,
-    `Started: ${localTime(entry.startedAt)}`,
-    `Ended: ${localTime(entry.endedAt)}`,
+    `Started: ${localTime(entry.startedAt)} (${entry.startedAt})`,
+    `Ended: ${localTime(entry.endedAt)} (${entry.endedAt})`,
     `Result: ${resultText(entry)}`,
     ...(entry.result.error ? [`Error: ${entry.result.error}`] : []),
     "Commands:",
