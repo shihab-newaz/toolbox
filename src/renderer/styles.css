@@ -38,6 +38,17 @@ main {
   padding: 24px 16px 48px;
 }
 
+input[type="search"] {
+  box-sizing: border-box;
+  width: 100%;
+  background: var(--card);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font: inherit;
+}
+
 h2 {
   font-size: 12px;
   letter-spacing: 0.08em;
