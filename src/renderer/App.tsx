@@ -59,14 +59,11 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
   }
 
   const needle = query.trim().toLowerCase();
+  const contains = (text: string) => text.toLowerCase().includes(needle);
   const visibleCategories = (manifest?.categories ?? [])
     .map((category) => ({
       ...category,
-      tools: category.tools.filter(
-        (tool) =>
-          tool.name.toLowerCase().includes(needle) ||
-          tool.description.toLowerCase().includes(needle),
-      ),
+      tools: category.tools.filter((tool) => contains(tool.name) || contains(tool.description)),
     }))
     .filter((category) => needle === "" || category.tools.length > 0);
 
@@ -80,6 +77,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
       )}
       {manifest && (
         <input
+          className="search"
           type="search"
           aria-label="Search Tools"
           placeholder="Search Tools"

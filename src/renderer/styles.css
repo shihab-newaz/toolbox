@@ -38,7 +38,7 @@ main {
   padding: 24px 16px 48px;
 }
 
-input[type="search"] {
+.search {
   box-sizing: border-box;
   width: 100%;
   background: var(--card);

@@ -284,6 +284,7 @@ describe("App search box", () => {
 
   const shownTools = () =>
     screen.queryAllByRole("listitem").map((row) => row.querySelector("span")!.textContent);
+  const noMatchMessage = /no tool matches/i;
   const shownCategories = () => screen.queryAllByRole("heading", { level: 2 }).map((h) => h.textContent);
 
   it("shows the matching Tools from every Category, each under its Category name", async () => {
@@ -330,13 +331,13 @@ describe("App search box", () => {
     const { bridge } = fakeBridge(zoo);
     render(<App bridge={bridge} />);
     await search("cache");
-    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
 
     await search("quokka");
 
     expect(shownCategories()).toEqual([]);
     expect(shownTools()).toEqual([]);
-    expect(screen.getByText(/no tool matches/i).textContent).toContain("quokka");
+    expect(screen.getByText(noMatchMessage).textContent).toContain("quokka");
   });
 
   it("ignores spaces around the search, and treats a search of only spaces as empty", async () => {
@@ -347,11 +348,11 @@ describe("App search box", () => {
     expect(shownTools()).toEqual(["Clear print queue"]);
 
     await search("  quokka ");
-    expect(screen.getByText(/no tool matches/i).textContent).toMatch(/"quokka"/);
+    expect(screen.getByText(noMatchMessage).textContent).toMatch(/"quokka"/);
 
     await search("   ");
     expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup"]);
-    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
   });
 
   it("keeps showing a Category that has no Tools while nothing is searched for", async () => {
@@ -373,7 +374,7 @@ describe("App search box", () => {
 
     await screen.findByRole("searchbox");
 
-    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
   });
 
   it("offers no search box when the Manifest cannot be loaded", async () => {
@@ -400,7 +401,7 @@ describe("App search box", () => {
       "Rebuild icon cache",
       "Free-space check",
     ]);
-    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+    expect(screen.queryByText(noMatchMessage)).toBeNull();
   });
 
   it("runs a Tool found by search the same way as from the Category list", async () => {
