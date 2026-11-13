@@ -28,6 +28,67 @@ export function currentAccount(execute: () => WhoamiResult = runWhoami): Account
   return { ok: false, error: `Could not read the Windows account: ${reason}` };
 }
 
+/** Development flag: run unelevated, with no relaunch and no account check. */
+const NO_ELEVATE_FLAG = "--no-elevate";
+/** Marks the copy relaunched through UAC, so it never relaunches again. */
+const ELEVATED_FLAG = "--elevated";
+/** Tells the elevated copy which Windows account started the app. */
+const STARTED_BY_PREFIX = "--started-by=";
+
+export type LaunchDecision =
+  | { action: "open" }
+  | { action: "relaunch"; args: string[] }
+  | { action: "refuse"; title: string; message: string };
+
+const sameAccount = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+const refuse = (message: string): LaunchDecision => ({
+  action: "refuse",
+  title: "Toolbox cannot run from this account",
+  message,
+});
+
+/**
+ * What this copy of the app does at launch: open the window, relaunch through UAC
+ * with `args`, or refuse to run. UAC switches to another account when a standard
+ * user types an administrator's password; the Tools would then act on that other
+ * account's files, so the elevated copy refuses (ADR 0001).
+ */
+export function decideLaunch(
+  argv: string[],
+  system: { isElevated: () => boolean; currentAccount: () => AccountResult } = {
+    isElevated,
+    currentAccount,
+  },
+): LaunchDecision {
+  if (argv.includes(NO_ELEVATE_FLAG)) return { action: "open" };
+
+  if (!argv.includes(ELEVATED_FLAG)) {
+    if (system.isElevated()) return { action: "open" };
+    const current = system.currentAccount();
+    if (!current.ok) return refuse(current.error);
+    return { action: "relaunch", args: [ELEVATED_FLAG, STARTED_BY_PREFIX + current.account] };
+  }
+
+  const startedBy = argv
+    .find((arg) => arg.startsWith(STARTED_BY_PREFIX))
+    ?.slice(STARTED_BY_PREFIX.length)
+    .trim();
+  if (!startedBy) {
+    return refuse("Toolbox was not told which Windows account started it. Start Toolbox again.");
+  }
+  const current = system.currentAccount();
+  if (!current.ok) return refuse(current.error);
+  if (sameAccount(startedBy, current.account)) return { action: "open" };
+  return refuse(
+    `Toolbox was started by the Windows account ${startedBy}, but Windows gave it ` +
+      `administrator rights as ${current.account}. Its Tools would act on that other ` +
+      "account's files, so Toolbox will not run.\n\n" +
+      "Standard accounts are not supported. Sign in to Windows with an administrator account " +
+      "and start Toolbox there.",
+  );
+}
+
 export type RelaunchResult = { ok: true } | { ok: false; error: string };
 
 export interface ExecuteResult {
