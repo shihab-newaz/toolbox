@@ -1,4 +1,5 @@
 import { spawn, spawnSync } from "node:child_process";
+import path from "node:path";
 
 /** `net session` succeeds only in an elevated (administrator) process. */
 export function isElevated(): boolean {
@@ -15,7 +16,9 @@ export interface WhoamiResult {
 
 function runWhoami(): WhoamiResult {
   // latin1 keeps every byte apart, so two different names never read as the same text.
-  const run = spawnSync("whoami", [], { windowsHide: true, encoding: "latin1" });
+  // The Windows copy by full path: a `whoami` earlier on PATH (Git Bash) omits the domain.
+  const whoami = path.join(process.env.SystemRoot ?? "C:\\Windows", "System32", "whoami.exe");
+  const run = spawnSync(whoami, [], { windowsHide: true, encoding: "latin1" });
   return { exitCode: run.status, output: run.stdout ?? "", error: run.error?.message };
 }
 
