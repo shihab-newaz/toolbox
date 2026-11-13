@@ -41,7 +41,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
     setRuns((prev) => ({ ...prev, [toolId]: { output: [], result: null } }));
     let result: RunResult;
     try {
-      result = await bridge.runTool(toolId);
+      result = await bridge.runTool(toolId, false);
     } catch (err) {
       result = {
         ok: false,

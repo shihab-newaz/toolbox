@@ -43,7 +43,7 @@ describe("run service", () => {
   });
 
   it.each(["normal", "high"] as const)(
-    "refuses a %s-risk Tool without running it, because only read-only Tools may run until confirmation exists",
+    "refuses a %s Tool whose Run was not confirmed, without running it",
     async (risk) => {
       const service = createRunService({
         getManifest: () => manifestOf(tool("risky", 'console.log("ran anyway")', risk)),
@@ -54,10 +54,40 @@ describe("run service", () => {
       const result = await service.run("risky", (e) => events.push(e));
 
       expect(result.ok).toBe(false);
-      expect(result.error).toMatch(/read-only/i);
+      expect(result.error).toMatch(/not confirmed/i);
       expect(events).toEqual([]);
     },
   );
+
+  it.each(["normal", "high"] as const)("runs a %s Tool whose Run was confirmed", async (risk) => {
+    const service = createRunService({
+      getManifest: () => manifestOf(tool("risky", 'console.log("ran")', risk)),
+      shell: nodeShell,
+    });
+    const events: OutputEvent[] = [];
+
+    const result = await service.run("risky", (e) => events.push(e), { confirmed: true });
+
+    expect(result).toEqual({ ok: true, failedStep: null, exitCode: 0 });
+    expect(textOf(events)).toContain("ran");
+  });
+
+  it("refuses a normal Tool when the confirmation is anything but an explicit yes", async () => {
+    const service = createRunService({
+      getManifest: () => manifestOf(tool("risky", 'console.log("ran anyway")', "normal")),
+      shell: nodeShell,
+    });
+    const events: OutputEvent[] = [];
+
+    // What a stray call from the window could send instead of `true`.
+    const result = await service.run("risky", (e) => events.push(e), {
+      confirmed: "yes" as unknown as boolean,
+    });
+
+    expect(result.ok).toBe(false);
+    expect(result.error).toMatch(/not confirmed/i);
+    expect(events).toEqual([]);
+  });
 
   it("refuses a second start of a Tool that is still running, and lets it start again afterwards", async () => {
     const service = createRunService({
