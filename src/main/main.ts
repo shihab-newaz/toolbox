@@ -29,9 +29,12 @@ function registerIpc(): void {
   const runService = createRunService({
     getManifest: () => validateManifest(manifest),
     shell: POWERSHELL,
+    logFolder: app.getPath("userData"),
   });
 
   ipcMain.handle("manifest:get", () => validateManifest(manifest));
+
+  ipcMain.handle("runlog:get", () => runService.getRunLog());
 
   ipcMain.handle("tool:run", (event, toolId: string) =>
     runService.run(toolId, (output) => {
