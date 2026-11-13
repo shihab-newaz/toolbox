@@ -249,3 +249,203 @@ describe("App", () => {
     expect(screen.getByText(/must contain a categories list/i)).toBeTruthy();
   });
 });
+
+describe("App search box", () => {
+  const zoo: Manifest = {
+    categories: [
+      {
+        id: "net",
+        name: "Network",
+        tools: [
+          { ...tool("dns", "Flush DNS cache"), description: "Fixes sites that will not load" },
+          { ...tool("wifi", "Show Wi-Fi password"), description: "Reads the saved key of a WLAN network" },
+        ],
+      },
+      {
+        id: "fix",
+        name: "Fix-it",
+        tools: [
+          { ...tool("spool", "Clear print queue"), description: "Unsticks a printer that will not print" },
+          { ...tool("icons", "Rebuild icon cache"), description: "Repairs blank desktop icons" },
+        ],
+      },
+      {
+        id: "disk",
+        name: "Disk cleanup",
+        tools: [{ ...tool("space", "Free-space check"), description: "Reports how full each drive is" }],
+      },
+    ],
+  };
+
+  async function search(text: string) {
+    const box = await screen.findByRole("searchbox", { name: "Search Tools" });
+    fireEvent.change(box, { target: { value: text } });
+  }
+
+  const shownTools = () =>
+    screen.queryAllByRole("listitem").map((row) => row.querySelector("span")!.textContent);
+  const shownCategories = () => screen.queryAllByRole("heading", { level: 2 }).map((h) => h.textContent);
+
+  it("shows the matching Tools from every Category, each under its Category name", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("cache");
+
+    expect(shownCategories()).toEqual(["Network", "Fix-it"]);
+    expect(shownTools()).toEqual(["Flush DNS cache", "Rebuild icon cache"]);
+    expect((screen.getByRole("searchbox") as HTMLInputElement).value).toBe("cache");
+    const network = screen.getByText("Network").closest("section")!;
+    expect(within(network).getByText("Flush DNS cache")).toBeTruthy();
+    const fixIt = screen.getByText("Fix-it").closest("section")!;
+    expect(within(fixIt).getByText("Rebuild icon cache")).toBeTruthy();
+  });
+
+  it("matches a Tool's name whatever the case of the search or the name", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("dns");
+    expect(shownTools()).toEqual(["Flush DNS cache"]);
+
+    await search("FREE-SPACE");
+    expect(shownTools()).toEqual(["Free-space check"]);
+  });
+
+  it("matches a Tool's description as well as its name, ignoring case", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("PRINTER");
+
+    expect(shownCategories()).toEqual(["Fix-it"]);
+    expect(shownTools()).toEqual(["Clear print queue"]);
+
+    await search("wlan");
+
+    expect(shownTools()).toEqual(["Show Wi-Fi password"]);
+  });
+
+  it("says so when no Tool matches the search", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+    await search("cache");
+    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+
+    await search("quokka");
+
+    expect(shownCategories()).toEqual([]);
+    expect(shownTools()).toEqual([]);
+    expect(screen.getByText(/no tool matches/i).textContent).toContain("quokka");
+  });
+
+  it("ignores spaces around the search, and treats a search of only spaces as empty", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+
+    await search("  printer ");
+    expect(shownTools()).toEqual(["Clear print queue"]);
+
+    await search("  quokka ");
+    expect(screen.getByText(/no tool matches/i).textContent).toMatch(/"quokka"/);
+
+    await search("   ");
+    expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup"]);
+    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+  });
+
+  it("keeps showing a Category that has no Tools while nothing is searched for", async () => {
+    const { bridge } = fakeBridge({
+      categories: [...zoo.categories, { id: "dev", name: "Developer", tools: [] }],
+    });
+    render(<App bridge={bridge} />);
+
+    await search("");
+    expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup", "Developer"]);
+
+    await search("cache");
+    expect(shownCategories()).toEqual(["Network", "Fix-it"]);
+  });
+
+  it("does not report a failed search for a Manifest with no Categories", async () => {
+    const { bridge } = fakeBridge({ categories: [] });
+    render(<App bridge={bridge} />);
+
+    await screen.findByRole("searchbox");
+
+    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+  });
+
+  it("offers no search box when the Manifest cannot be loaded", async () => {
+    const { bridge } = fakeBridge(zoo, { getManifest: async () => { throw new Error("broken"); } });
+    render(<App bridge={bridge} />);
+
+    await screen.findByText(/could not load the manifest/i);
+
+    expect(screen.queryByRole("searchbox")).toBeNull();
+  });
+
+  it("restores the full Category list when the search is cleared", async () => {
+    const { bridge } = fakeBridge(zoo);
+    render(<App bridge={bridge} />);
+    await search("quokka");
+
+    await search("");
+
+    expect(shownCategories()).toEqual(["Network", "Fix-it", "Disk cleanup"]);
+    expect(shownTools()).toEqual([
+      "Flush DNS cache",
+      "Show Wi-Fi password",
+      "Clear print queue",
+      "Rebuild icon cache",
+      "Free-space check",
+    ]);
+    expect(screen.queryByText(/no tool matches/i)).toBeNull();
+  });
+
+  it("runs a Tool found by search the same way as from the Category list", async () => {
+    let finish!: (r: RunResult) => void;
+    const ran: string[] = [];
+    const { bridge, emit } = fakeBridge(zoo, {
+      runTool: (toolId) => {
+        ran.push(toolId);
+        return new Promise<RunResult>((resolve) => (finish = resolve));
+      },
+    });
+    render(<App bridge={bridge} />);
+    await search("printer");
+
+    const row = screen.getByText("Clear print queue").closest("li")!;
+    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    fireEvent.click(button);
+
+    expect(ran).toEqual(["spool"]);
+    expect(button.disabled).toBe(true);
+    act(() => emit("spool", "Spooler stopped\n"));
+    expect(screen.getByText(/Spooler stopped/)).toBeTruthy();
+
+    await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
+    expect(screen.getByText(/finished/i)).toBeTruthy();
+  });
+
+  it("keeps a Tool's output and result when a search hides the Tool and then shows it again", async () => {
+    const { bridge, emit } = fakeBridge(zoo, {
+      runTool: async (toolId) => {
+        emit(toolId, "Spooler stopped\n");
+        return { ok: true, failedStep: null, exitCode: 0 };
+      },
+    });
+    render(<App bridge={bridge} />);
+    const row = (await screen.findByText("Clear print queue")).closest("li")!;
+    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+    await screen.findByText(/finished/i);
+
+    await search("dns");
+    expect(screen.queryByText(/Spooler stopped/)).toBeNull();
+    await search("");
+
+    const shownAgain = screen.getByText("Clear print queue").closest("li")!;
+    expect(within(shownAgain).getByText(/Spooler stopped/)).toBeTruthy();
+    expect(within(shownAgain).getByText(/finished/i)).toBeTruthy();
+  });
+});
