@@ -1,0 +1,23 @@
+# Packaging: `npm run dist` writes one portable executable to release/.
+appId: local.toolbox
+productName: Toolbox
+directories:
+  output: release
+# The window is bundled by Vite and the main process uses only Node and Electron,
+# so nothing from node_modules is needed at run time.
+files:
+  - dist-electron/**
+  - dist/renderer/**
+  - package.json
+  - "!node_modules"
+# No publish target: no update metadata is generated, and the app has no updater.
+publish: null
+win:
+  target:
+    - target: portable
+      arch: x64
+portable:
+  artifactName: Toolbox-${version}-portable.exe
+  # The executable's own manifest asks for administrator rights, so Windows shows
+  # the one UAC prompt before the app starts and the in-app relaunch never runs.
+  requestExecutionLevel: admin
