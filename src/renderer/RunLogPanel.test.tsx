@@ -121,6 +121,38 @@ describe("Run log panel", () => {
     expect(within(logPanel()).queryByText(/no runs yet/i)).toBeNull();
   });
 
+  it("lists every Run exactly once, even when saved Runs share a start time and Tool, when the log is trimmed", async () => {
+    // Newest first: one distinct Run on top of Runs that share a start time and Tool.
+    const log = [
+      entry({ toolName: "Top", startedAt: "2026-11-13T10:00:00.000Z", output: "top" }),
+      ...["one", "two", "three", "four"].map((output) => entry({ output })),
+    ];
+    const bridge = fakeBridge({
+      getRunLog: async () => [...log],
+      runTool: async () => {
+        // The log is full: a new Run goes on top and the oldest one drops off.
+        log.pop();
+        log.unshift(entry({ toolName: "Fresh", startedAt: "2026-11-13T11:00:00.000Z", output: "fresh" }));
+        return { ok: true, failedStep: null, exitCode: 0 };
+      },
+    });
+    render(<App bridge={bridge} />);
+    await within(logPanel()).findByText(/top/);
+    expect(within(logPanel()).getAllByRole("listitem")).toHaveLength(5);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+
+    await within(logPanel()).findByText(/fresh/);
+    const rows = within(logPanel()).getAllByRole("listitem");
+    expect(rows.map((row) => row.querySelector("pre:last-of-type")!.textContent)).toEqual([
+      "fresh",
+      "top",
+      "one",
+      "two",
+      "three",
+    ]);
+  });
+
   it("copies a Run's log entry to the clipboard", async () => {
     const copied: string[] = [];
     fakeClipboard(async (text) => void copied.push(text));

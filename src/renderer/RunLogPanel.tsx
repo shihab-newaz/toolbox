@@ -73,8 +73,9 @@ export function RunLogPanel({ bridge, refreshKey }: { bridge: ToolboxBridge; ref
       )}
       {!loadError && entries.length === 0 && <p className="meta">No Runs yet</p>}
       <ul>
-        {entries.map((entry) => (
-          <li key={`${entry.startedAt} ${entry.toolId}`}>
+        {entries.map((entry, index) => (
+          // By position: Runs can share a start time and Tool, and a row holds no state of its own.
+          <li key={index}>
             <span>{entry.toolName}</span>
             <button onClick={() => copyEntry(entry)}>
               {copy?.entry === entry && copy.ok ? "Copied" : "Copy"}
