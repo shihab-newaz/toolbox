@@ -3,7 +3,13 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
-import { buildStartProcessCommand, relaunchElevated } from "./elevation";
+import {
+  type AccountResult,
+  buildStartProcessCommand,
+  currentAccount,
+  decideLaunch,
+  relaunchElevated,
+} from "./elevation";
 
 const tempDirs: string[] = [];
 afterEach(() => {
@@ -157,4 +163,175 @@ describe("relaunchElevated", () => {
     expect(seen).toContain("-Verb RunAs");
     expect(seen).toContain("toolbox.exe");
   });
+});
+
+describe("currentAccount", () => {
+  it("reports the account Windows says this process runs as, without the line ending", () => {
+    const result = currentAccount(() => ({ exitCode: 0, output: "desktop-ab12\\mary ann\r\n" }));
+
+    expect(result).toEqual({ ok: true, account: "desktop-ab12\\mary ann" });
+  });
+
+  it("reports a failure when the account cannot be read", () => {
+    const failed = currentAccount(() => ({ exitCode: 1, output: "" }));
+    const notStarted = currentAccount(() => ({
+      exitCode: null,
+      output: "",
+      error: "spawn whoami ENOENT",
+    }));
+    const blank = currentAccount(() => ({ exitCode: 0, output: "\r\n" }));
+
+    expect(failed.ok).toBe(false);
+    expect(notStarted).toMatchObject({ ok: false, error: expect.stringMatching(/ENOENT/) });
+    expect(blank.ok).toBe(false);
+  });
+
+  it.skipIf(process.platform !== "win32")("reads the real account of this process on Windows", () => {
+    const result = currentAccount();
+
+    expect(result).toMatchObject({
+      ok: true,
+      account: expect.stringMatching(/^[^\\\r\n]+\\[^\\\r\n]+$/),
+    });
+  });
+});
+
+describe("decideLaunch", () => {
+  const exe = ["C:\\Apps\\electron.exe", "C:\\Apps\\toolbox"];
+  const runningAs = (account: string) => (): AccountResult => ({ ok: true, account });
+  const unelevated = (account: string) => ({
+    isElevated: () => false,
+    currentAccount: runningAs(account),
+  });
+  const elevated = (account: string) => ({
+    isElevated: () => true,
+    currentAccount: runningAs(account),
+  });
+
+  /** The arguments the elevated copy starts with after `account` launched the app. */
+  function relaunchArgsFrom(account: string): string[] {
+    const decision = decideLaunch(exe, unelevated(account));
+    if (decision.action !== "relaunch") throw new Error(`expected a relaunch, got ${decision.action}`);
+    return decision.args;
+  }
+
+  it("relaunches an unelevated start", () => {
+    expect(decideLaunch(exe, unelevated("pc\\mary")).action).toBe("relaunch");
+  });
+
+  it("opens the window when the elevated copy runs as the account that started it", () => {
+    const args = relaunchArgsFrom("pc\\mary");
+
+    expect(decideLaunch([...exe, ...args], elevated("pc\\mary"))).toEqual({ action: "open" });
+  });
+
+  it("does not ask for administrator rights a second time in the elevated copy", () => {
+    const args = relaunchArgsFrom("pc\\mary");
+
+    // `net session` can fail in an elevated process when the Server service is stopped.
+    expect(decideLaunch([...exe, ...args], unelevated("pc\\mary"))).toEqual({ action: "open" });
+  });
+
+  it("treats the same account written in different letter case as the same account", () => {
+    const args = relaunchArgsFrom("DESKTOP-AB12\\Mary Ann");
+
+    expect(decideLaunch([...exe, ...args], elevated("desktop-ab12\\mary ann"))).toEqual({
+      action: "open",
+    });
+  });
+
+  it("refuses when the elevated copy runs as a different account, naming both accounts", () => {
+    const args = relaunchArgsFrom("pc\\kid");
+
+    const decision = decideLaunch([...exe, ...args], elevated("pc\\parent"));
+
+    expect(decision.action).toBe("refuse");
+    const message = decision.action === "refuse" ? decision.message : "";
+    expect(message).toContain("pc\\kid");
+    expect(message).toContain("pc\\parent");
+  });
+
+  it("does not let a non-ASCII byte that looks like space or a capital pass for another name", () => {
+    // whoami's bytes are read as latin1: U+00A0 is a no-break space, U+00C0 a capital.
+    const spaceEnded = relaunchArgsFrom("pc\\pel ");
+    const capital = relaunchArgsFrom("pc\\À");
+
+    expect(decideLaunch([...exe, ...spaceEnded], elevated("pc\\pel")).action).toBe("refuse");
+    expect(decideLaunch([...exe, ...capital], elevated("pc\\à")).action).toBe("refuse");
+  });
+
+  it("refuses the same name on a different machine or domain", () => {
+    const args = relaunchArgsFrom("pc\\admin");
+
+    expect(decideLaunch([...exe, ...args], elevated("corp\\admin")).action).toBe("refuse");
+  });
+
+  it("refuses when one name only begins with the other", () => {
+    const args = relaunchArgsFrom("pc\\mary");
+
+    expect(decideLaunch([...exe, ...args], elevated("pc\\mary ann")).action).toBe("refuse");
+  });
+
+  it("refuses an elevated copy that was not told which account started it", () => {
+    const withoutAccount = relaunchArgsFrom("pc\\mary").filter((arg) => !arg.includes("mary"));
+
+    expect(decideLaunch([...exe, ...withoutAccount], elevated("pc\\mary")).action).toBe("refuse");
+  });
+
+  it("refuses when the elevated copy cannot read its own account", () => {
+    const args = relaunchArgsFrom("pc\\mary");
+
+    const decision = decideLaunch([...exe, ...args], {
+      isElevated: () => true,
+      currentAccount: () => ({ ok: false, error: "Could not read the Windows account: boom" }),
+    });
+
+    expect(decision).toMatchObject({ action: "refuse", message: expect.stringMatching(/boom/) });
+  });
+
+  it("refuses to relaunch when the account that started the app cannot be read", () => {
+    const decision = decideLaunch(exe, {
+      isElevated: () => false,
+      currentAccount: () => ({ ok: false, error: "Could not read the Windows account: boom" }),
+    });
+
+    expect(decision).toMatchObject({ action: "refuse", message: expect.stringMatching(/boom/) });
+  });
+
+  it("opens the window without a check when the app was started already elevated", () => {
+    const neverAsked = () => {
+      throw new Error("the account must not be read");
+    };
+
+    expect(decideLaunch(exe, { isElevated: () => true, currentAccount: neverAsked })).toEqual({
+      action: "open",
+    });
+  });
+
+  it("skips both elevation and the account check under the development flag", () => {
+    const neverAsked = () => {
+      throw new Error("must not be called under --no-elevate");
+    };
+    const mismatched = relaunchArgsFrom("pc\\kid");
+
+    for (const argv of [
+      [...exe, "--no-elevate"],
+      [...exe, "--no-elevate", ...mismatched],
+    ]) {
+      expect(decideLaunch(argv, { isElevated: neverAsked, currentAccount: neverAsked })).toEqual({
+        action: "open",
+      });
+    }
+  });
+
+  it("carries an account name with spaces and quotes through the real relaunch command", async () => {
+    for (const account of ["My Laptop\\Mary Ann O'Neil", 'corp\\say "hi" ’x’']) {
+      const { received } = await argsReceivedBy(relaunchArgsFrom(account));
+
+      expect(decideLaunch([...exe, ...received], elevated(account))).toEqual({ action: "open" });
+      expect(decideLaunch([...exe, ...received], elevated("pc\\someone else")).action).toBe(
+        "refuse",
+      );
+    }
+  }, 40000);
 });
