@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import os from "node:os";
 import path from "node:path";
 import { manifest } from "../shared/manifest";
 import { validateManifest } from "../shared/validateManifest";
-import { decideLaunch, relaunchElevated } from "./elevation";
+import { decideLaunch, relaunchElevated, type LaunchDecision } from "./elevation";
 import { killAllRunning, POWERSHELL } from "./runner";
 import { createRunService } from "./runService";
+import { getVersionInfo } from "./versionInfo";
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -30,6 +32,10 @@ function registerIpc(): void {
 
   ipcMain.handle("manifest:get", () => validateManifest(manifest));
 
+  ipcMain.handle("versions:get", () =>
+    getVersionInfo({ appVersion: app.getVersion(), osRelease: os.release() }),
+  );
+
   ipcMain.handle("runlog:get", () => runService.getRunLog());
 
   ipcMain.handle("tool:run", (event, toolId: string, confirmed: boolean) =>
@@ -47,7 +53,9 @@ function registerIpc(): void {
 }
 
 app.whenReady().then(async () => {
-  const launch = decideLaunch(process.argv);
+  // The packaged executable is already started elevated by its own manifest (a single UAC
+  // prompt), so it never relaunches itself, even if `net session` fails there.
+  const launch: LaunchDecision = app.isPackaged ? { action: "open" } : decideLaunch(process.argv);
   if (launch.action === "relaunch") {
     // Ask Windows for administrator rights once, then let the elevated copy take over.
     const relaunch = await relaunchElevated(process.execPath, [app.getAppPath(), ...launch.args]);

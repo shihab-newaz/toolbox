@@ -11,7 +11,8 @@
     "build:renderer": "vite build",
     "build": "npm run build:main && npm run build:renderer",
     "start": "npm run build && electron .",
-    "start:dev": "npm run build && electron . --no-elevate"
+    "start:dev": "npm run build && electron . --no-elevate",
+    "dist": "npm run build && electron-builder --win"
   },
   "dependencies": {
     "react": "^19.3.1",
@@ -25,6 +26,7 @@
     "@types/react-dom": "^19.3.0",
     "@vitejs/plugin-react": "^6.3.0",
     "electron": "^45.2.3",
+    "electron-builder": "^26.18.0",
     "jsdom": "^31.0.0",
     "typescript": "^7.0.2",
     "vite": "^8.3.7",

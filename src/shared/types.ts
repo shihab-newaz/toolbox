@@ -52,6 +52,13 @@ export interface RunLogEntry {
   result: RunResult;
 }
 
+export interface VersionInfo {
+  /** The Toolbox's own version. */
+  app: string;
+  /** The Windows version in words, such as "Windows 11 (build 26100)". */
+  windows: string;
+}
+
 /** What the renderer may ask of the main process. */
 export interface ToolboxBridge {
   getManifest(): Promise<Manifest>;
@@ -62,6 +69,7 @@ export interface ToolboxBridge {
   runTool(toolId: string, confirmed: boolean): Promise<RunResult>;
   /** The Run log, newest Run first. */
   getRunLog(): Promise<RunLogEntry[]>;
+  getVersions(): Promise<VersionInfo>;
   /** Subscribe to live output of any running Tool; returns an unsubscribe function. */
   onOutput(listener: (toolId: string, event: OutputEvent) => void): () => void;
 }

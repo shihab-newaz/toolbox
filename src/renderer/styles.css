@@ -91,6 +91,10 @@ li > p {
   font-size: 12px;
 }
 
+.versions {
+  margin: 28px 0 0;
+}
+
 button {
   background: var(--accent);
   color: var(--accent-text);

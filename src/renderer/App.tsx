@@ -1,5 +1,11 @@
 import { useEffect, useRef, useState } from "react";
-import type { Manifest, OutputEvent, RunResult, ToolboxBridge } from "../shared/types";
+import type {
+  Manifest,
+  OutputEvent,
+  RunResult,
+  ToolboxBridge,
+  VersionInfo,
+} from "../shared/types";
 import { RunLogPanel } from "./RunLogPanel";
 
 interface RunState {
@@ -23,6 +29,13 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
       .catch((err: unknown) =>
         setLoadError(err instanceof Error ? err.message : String(err)),
       );
+  }, [bridge]);
+
+  const [versions, setVersions] = useState<VersionInfo | null>(null);
+
+  useEffect(() => {
+    // The versions are only for reporting; the Toolbox works without them.
+    bridge.getVersions().then(setVersions, () => undefined);
   }, [bridge]);
 
   useEffect(
@@ -160,6 +173,11 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
         </section>
       ))}
       <RunLogPanel bridge={bridge} refreshKey={endedRuns} />
+      {versions && (
+        <p className="meta versions">
+          Toolbox {versions.app} · {versions.windows}
+        </p>
+      )}
     </main>
   );
 }

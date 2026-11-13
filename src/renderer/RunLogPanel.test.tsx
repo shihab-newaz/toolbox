@@ -40,6 +40,7 @@ function fakeBridge(overrides: Partial<ToolboxBridge> = {}): ToolboxBridge {
     getManifest: async () => manifest,
     runTool: async () => ({ ok: true, failedStep: null, exitCode: 0 }),
     getRunLog: async () => [],
+    getVersions: async () => ({ app: "0.0.0", windows: "Windows" }),
     onOutput: () => () => {},
     ...overrides,
   };
