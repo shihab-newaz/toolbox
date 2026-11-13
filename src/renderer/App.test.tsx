@@ -23,6 +23,7 @@ function fakeBridge(manifest: Manifest, overrides: Partial<ToolboxBridge> = {}) 
   const listeners = new Set<(toolId: string, e: OutputEvent) => void>();
   const bridge: ToolboxBridge = {
     getManifest: async () => manifest,
+    getVersions: async () => ({ app: "0.0.0", windows: "Windows" }),
     runTool: async () => ({ ok: true, failedStep: null, exitCode: 0 }) as RunResult,
     onOutput: (l) => {
       listeners.add(l);
@@ -236,6 +237,31 @@ describe("App", () => {
       const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
       expect(button.disabled).toBe(true);
     }
+  });
+
+  it("shows the app version and the Windows version", async () => {
+    const { bridge } = fakeBridge(
+      { categories: [] },
+      { getVersions: async () => ({ app: "4.5.6", windows: "Windows 11 (build 26100)" }) },
+    );
+
+    render(<App bridge={bridge} />);
+
+    const versions = await screen.findByRole("contentinfo");
+    expect(versions.textContent).toContain("Toolbox 4.5.6");
+    expect(versions.textContent).toContain("Windows 11 (build 26100)");
+  });
+
+  it("still lists the Tools when the versions cannot be read", async () => {
+    const { bridge } = fakeBridge(
+      { categories: [{ id: "c", name: "Quokka care", tools: [tool("t1", "Feed quokkas")] }] },
+      { getVersions: () => Promise.reject(new Error("no versions")) },
+    );
+
+    render(<App bridge={bridge} />);
+
+    expect(await screen.findByText("Feed quokkas")).toBeTruthy();
+    expect(screen.queryByRole("contentinfo")).toBeNull();
   });
 
   it("shows a message when the Manifest cannot be loaded", async () => {

@@ -1,10 +1,12 @@
 import { app, BrowserWindow, dialog, ipcMain } from "electron";
+import os from "node:os";
 import path from "node:path";
 import { manifest } from "../shared/manifest";
 import { validateManifest } from "../shared/validateManifest";
 import { isElevated, relaunchElevated } from "./elevation";
 import { killAllRunning, POWERSHELL } from "./runner";
 import { createRunService } from "./runService";
+import { getVersionInfo } from "./versionInfo";
 
 // `--elevated` marks the copy we relaunched through UAC, so it never relaunches again.
 const skipElevation =
@@ -32,6 +34,10 @@ function registerIpc(): void {
   });
 
   ipcMain.handle("manifest:get", () => validateManifest(manifest));
+
+  ipcMain.handle("versions:get", () =>
+    getVersionInfo({ appVersion: app.getVersion(), osRelease: os.release() }),
+  );
 
   ipcMain.handle("tool:run", (event, toolId: string) =>
     runService.run(toolId, (output) => {

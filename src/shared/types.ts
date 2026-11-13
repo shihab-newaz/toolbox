@@ -37,9 +37,17 @@ export interface RunResult {
   error?: string;
 }
 
+export interface VersionInfo {
+  /** The Toolbox's own version. */
+  app: string;
+  /** The Windows version in words, such as "Windows 11 (build 26100)". */
+  windows: string;
+}
+
 /** What the renderer may ask of the main process. */
 export interface ToolboxBridge {
   getManifest(): Promise<Manifest>;
+  getVersions(): Promise<VersionInfo>;
   runTool(toolId: string): Promise<RunResult>;
   /** Subscribe to live output of any running Tool; returns an unsubscribe function. */
   onOutput(listener: (toolId: string, event: OutputEvent) => void): () => void;

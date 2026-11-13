@@ -80,6 +80,10 @@ li > p {
   font-size: 12px;
 }
 
+footer {
+  margin-top: 28px;
+}
+
 button {
   background: var(--accent);
   color: var(--accent-text);
