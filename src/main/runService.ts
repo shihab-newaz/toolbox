@@ -1,8 +1,11 @@
-import type { Manifest, OutputEvent, RunResult } from "../shared/types";
+import type { Manifest, OutputEvent, RunLogEntry, RunResult } from "../shared/types";
+import { createRunLog } from "./runLog";
 import { runTool, type Shell } from "./runner";
 
 export interface RunService {
   run(toolId: string, onOutput: (event: OutputEvent) => void): Promise<RunResult>;
+  /** Every Run that started and ended, newest first. */
+  getRunLog(): RunLogEntry[];
 }
 
 const refused = (error: string): RunResult => ({
@@ -20,8 +23,11 @@ const refused = (error: string): RunResult => ({
 export function createRunService(options: {
   getManifest: () => Manifest;
   shell: Shell;
+  /** Where the Run log is saved. Without it the log is not kept across restarts. */
+  logFolder?: string;
 }): RunService {
   const running = new Set<string>();
+  const runLog = createRunLog(options.logFolder);
 
   return {
     async run(toolId, onOutput) {
@@ -39,11 +45,27 @@ export function createRunService(options: {
       if (running.has(toolId)) return refused(`"${tool.name}" is already running`);
 
       running.add(toolId);
+      const startedAt = new Date().toISOString();
+      let output = "";
       try {
-        return await runTool(tool, options.shell, onOutput);
+        const result = await runTool(tool, options.shell, (event) => {
+          output += event.text;
+          onOutput(event);
+        });
+        runLog.add({
+          toolId: tool.id,
+          toolName: tool.name,
+          startedAt,
+          endedAt: new Date().toISOString(),
+          commands: tool.steps.flatMap((step) => (step.kind === "command" ? [step.command] : [])),
+          output,
+          result,
+        });
+        return result;
       } finally {
         running.delete(toolId);
       }
     },
+    getRunLog: () => runLog.entries(),
   };
 }

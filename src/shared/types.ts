@@ -37,10 +37,27 @@ export interface RunResult {
   error?: string;
 }
 
+/** One past Run, as kept in the Run log. */
+export interface RunLogEntry {
+  toolId: string;
+  toolName: string;
+  /** ISO 8601 date and time. */
+  startedAt: string;
+  /** ISO 8601 date and time. */
+  endedAt: string;
+  /** The command of every command Step, in order. */
+  commands: string[];
+  /** Standard output and error output together, in the order they arrived. */
+  output: string;
+  result: RunResult;
+}
+
 /** What the renderer may ask of the main process. */
 export interface ToolboxBridge {
   getManifest(): Promise<Manifest>;
   runTool(toolId: string): Promise<RunResult>;
+  /** The Run log, newest Run first. */
+  getRunLog(): Promise<RunLogEntry[]>;
   /** Subscribe to live output of any running Tool; returns an unsubscribe function. */
   onOutput(listener: (toolId: string, event: OutputEvent) => void): () => void;
 }

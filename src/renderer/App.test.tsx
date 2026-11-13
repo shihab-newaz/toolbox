@@ -24,6 +24,7 @@ function fakeBridge(manifest: Manifest, overrides: Partial<ToolboxBridge> = {}) 
   const bridge: ToolboxBridge = {
     getManifest: async () => manifest,
     runTool: async () => ({ ok: true, failedStep: null, exitCode: 0 }) as RunResult,
+    getRunLog: async () => [],
     onOutput: (l) => {
       listeners.add(l);
       return () => listeners.delete(l);

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, OutputEvent, RunResult, ToolboxBridge } from "../shared/types";
+import { RunLogPanel } from "./RunLogPanel";
 
 interface RunState {
   output: OutputEvent[];
@@ -11,6 +12,8 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
   const [runs, setRuns] = useState<Record<string, RunState>>({});
 
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Counts Runs that have ended, so the log panel knows when to read the Run log again.
+  const [endedRuns, setEndedRuns] = useState(0);
 
   useEffect(() => {
     bridge
@@ -51,6 +54,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
       };
     }
     inFlight.current.delete(toolId);
+    setEndedRuns((count) => count + 1);
     setRuns((prev) => ({
       ...prev,
       [toolId]: { output: prev[toolId]?.output ?? [], result },
@@ -107,6 +111,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
           </ul>
         </section>
       ))}
+      <RunLogPanel bridge={bridge} refreshKey={endedRuns} />
     </main>
   );
 }
