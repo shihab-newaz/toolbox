@@ -1,0 +1,70 @@
+/* Design tokens from DESIGN.md. Light by default, dark when Windows is dark. */
+:root {
+  color-scheme: light dark;
+
+  --font-ui: "Figtree", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "Cascadia Mono", Consolas, monospace;
+
+  --bg: #f3f3f3;
+  --sf: #ffffff;
+  --sf2: #f7f7f7;
+  --hv: #ececec;
+  --sel: #e3eefa;
+  --tx: #1b1b1b;
+  --mu: #5c5c5c;
+  --bd: #e2e2e2;
+  --bds: #8d8d8d;
+  --ac: #005fb8;
+  --acon: #ffffff;
+  --code: #f6f6f6;
+  --scrim: rgba(0, 0, 0, 0.34);
+  --shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
+
+  /* Risk level: reserved for Risk level only. */
+  --ro-bg: transparent;
+  --ro-fg: #3a3a3a;
+  --ro-bd: #8d8d8d;
+  --nb: #fff1c2;
+  --nf: #5a3f00;
+  --nbd: #c79a00;
+  --ntint: #fff4ce;
+  --hb: #c42b1c;
+  --hf: #ffffff;
+  --hbd: #c42b1c;
+  --htint: #fde7e9;
+
+  /* Run outcome marks, kept apart from the Risk level colours. */
+  --ok: #0f7b0f;
+  --err: #b3261e;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #1f1f1f;
+    --sf: #2a2a2a;
+    --sf2: #303030;
+    --hv: #363636;
+    --sel: #2b4152;
+    --tx: #f5f5f5;
+    --mu: #b9b9b9;
+    --bd: #3d3d3d;
+    --bds: #7a7a7a;
+    --ac: #60cdff;
+    --acon: #0a0a0a;
+    --code: #202020;
+    --scrim: rgba(0, 0, 0, 0.56);
+    --shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
+
+    --ro-fg: #e6e6e6;
+    --ro-bd: #8a8a8a;
+    --nb: #4a3a10;
+    --nf: #ffe28a;
+    --nbd: #b08a1c;
+    --ntint: #3b3014;
+    --hbd: #ea6a5c;
+    --htint: #3f2326;
+
+    --ok: #6ccb5f;
+    --err: #ff8f85;
+  }
+}

@@ -1,35 +1,19 @@
+/* Temporary: the old names, mapped to the tokens, until the layout moves to the new components. */
 :root {
-  color-scheme: light dark;
-  --bg: #f6f7f9;
-  --card: #ffffff;
-  --text: #1c2024;
-  --muted: #5f6b76;
-  --border: #d9dee3;
-  --accent: #1f6feb;
-  --accent-text: #ffffff;
-  --danger: #c4261d;
-  --ok: #1a7f37;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --bg: #14171a;
-    --card: #1d2125;
-    --text: #e6e9ec;
-    --muted: #9aa5af;
-    --border: #2f363d;
-    --accent: #4c8dff;
-    --accent-text: #0b1220;
-    --danger: #ff6b61;
-    --ok: #4ac26b;
-  }
+  --card: var(--sf);
+  --text: var(--tx);
+  --muted: var(--mu);
+  --border: var(--bd);
+  --accent: var(--ac);
+  --accent-text: var(--acon);
+  --danger: var(--err);
 }
 
 body {
   margin: 0;
   background: var(--bg);
   color: var(--text);
-  font: 14px/1.5 "Segoe UI", system-ui, sans-serif;
+  font: 14px/1.5 var(--font-ui);
 }
 
 main {
@@ -116,7 +100,7 @@ pre {
   border: 1px solid var(--border);
   border-radius: 6px;
   padding: 8px 10px;
-  font: 12px/1.5 Consolas, monospace;
+  font: 12px/1.5 var(--font-mono);
   white-space: pre-wrap;
   overflow-x: auto;
 }
