@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import type { Manifest, RunResult, ToolboxBridge, VersionInfo } from "@shared/types";
-import { RunLogPanel } from "../runlog/RunLogPanel";
+import { RunLogView } from "../runlog/RunLogView";
 import { ConfirmDialog } from "../tools/ConfirmDialog";
 import { ToolList } from "../tools/ToolList";
 import { ToolPanel } from "../tools/ToolPanel";
@@ -177,7 +177,12 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
         </div>
       ) : (
         <div className="log-view">
-          <RunLogPanel bridge={bridge} refreshKey={endedRuns} />
+          <RunLogView
+            bridge={bridge}
+            refreshKey={endedRuns}
+            riskOf={(toolId) => allTools.find((tool) => tool.id === toolId)?.risk}
+            onBack={() => setView("tools")}
+          />
         </div>
       )}
       {versions && (
