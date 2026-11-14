@@ -209,14 +209,12 @@
   gap: 12px;
 }
 
-.dialog-normal {
-  border-top: 4px solid var(--nbd);
-  background: var(--ntint);
-}
-
-.dialog-high {
-  border-top: 4px solid var(--hb);
+/* A normal dialog has a neutral header. Only a high dialog tints its header band. */
+.dialog-high .dialog-head {
   background: var(--htint);
+  margin: -20px -24px 0;
+  padding: 16px 24px;
+  border-radius: 8px 8px 0 0;
 }
 
 .dialog-head {
