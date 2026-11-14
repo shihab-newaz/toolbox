@@ -72,10 +72,14 @@ export function ToolPanel({
       </div>
       {state && <RunResultSummary state={state} />}
       <h3>Output</h3>
-      {state ? (
+      {state && state.output.length > 0 ? (
         <pre ref={outputRef} className="output">
           {state.output.map((e) => e.text).join("")}
         </pre>
+      ) : state?.result ? (
+        <p className="muted">This Run produced no output.</p>
+      ) : state ? (
+        <p className="muted">Waiting for output…</p>
       ) : (
         <p className="muted">Nothing yet. Press Run and the result will appear here.</p>
       )}

@@ -256,6 +256,18 @@ describe("App", () => {
     expect(screen.queryByText(/finished/i)).toBeNull();
   });
 
+  it("says so when a Run produced no output, instead of leaving the output empty", async () => {
+    const { bridge } = fakeBridge(spaceManifest, {
+      runTool: async () => ({ ok: false, failedStep: 0, exitCode: 1 }),
+    });
+    render(<App bridge={bridge} />);
+    await open("Free-space check");
+
+    pressRun();
+
+    expect(await within(toolPanel()).findByText("This Run produced no output.")).toBeTruthy();
+  });
+
   it("shows the Run in the panel of the Tool it belongs to, not in another Tool's panel", async () => {
     const { bridge, emit } = fakeBridge({
       categories: [{ id: "c", name: "Disk", tools: [tool("a", "First"), tool("b", "Second")] }],
