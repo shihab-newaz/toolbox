@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { RiskLevel, RunLogEntry, ToolboxBridge } from "@shared/types";
+import { formatDuration } from "../tools/duration";
 import { RiskChip } from "../tools/RiskChip";
 import "./runlog.css";
 
@@ -21,11 +22,6 @@ function whenText(iso: string, now = new Date()): string {
   if (daysAgo === 0) return `Today, ${time}`;
   if (daysAgo === 1) return `Yesterday, ${time}`;
   return `${at.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" })}, ${time}`;
-}
-
-function tookText(entry: RunLogEntry): string {
-  const seconds = Math.max(0, Math.round((Date.parse(entry.endedAt) - Date.parse(entry.startedAt)) / 1000));
-  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
 }
 
 /** A Run's log entry as plain text, for pasting to whoever is helping. */
@@ -151,7 +147,7 @@ export function RunLogView({
             {copy?.entry === entry && !copy.ok && <p className="copy-failed">Could not copy this entry</p>}
             <p className={entry.result.ok ? "log-result" : "log-result log-result-failed"}>{resultText(entry)}</p>
             <p className="muted">
-              Started {localTime(entry.startedAt)} · Ended {localTime(entry.endedAt)} · took {tookText(entry)}
+              Started {localTime(entry.startedAt)} · Ended {localTime(entry.endedAt)} · took {formatDuration(Date.parse(entry.endedAt) - Date.parse(entry.startedAt))}
             </p>
             {entry.result.error && <p>{entry.result.error}</p>}
             <h3>Commands</h3>

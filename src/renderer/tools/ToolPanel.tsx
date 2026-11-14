@@ -1,13 +1,9 @@
 import { useEffect, useRef } from "react";
 import "./tools.css";
 import type { Tool } from "@shared/types";
+import { formatDuration } from "./duration";
 import { RiskChip, RISK_SUMMARY } from "./RiskChip";
 import { isRunning, type RunState } from "./runState";
-
-function duration(ms: number): string {
-  const seconds = Math.max(0, Math.round(ms / 1000));
-  return seconds < 60 ? `${seconds} s` : `${Math.floor(seconds / 60)} min ${seconds % 60} s`;
-}
 
 /** The outcome of the latest Run: one line a person can read, then what the Run took. */
 function RunResultSummary({ state }: { state: RunState }) {
@@ -21,7 +17,7 @@ function RunResultSummary({ state }: { state: RunState }) {
       {result.error && <p>{result.error}</p>}
       {endedAt !== null && (
         <p className="muted">
-          Took {duration(endedAt - startedAt)} · ended at{" "}
+          Took {formatDuration(endedAt - startedAt)} · ended at{" "}
           {new Date(endedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
         </p>
       )}

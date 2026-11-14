@@ -464,6 +464,25 @@ describe("App", () => {
       expect(started).toBe(0);
     });
 
+    it("keeps the page behind the confirmation out of reach while it is open, and gives it back when it closes", async () => {
+      const { bridge } = fakeBridge(cleanup2("normal"));
+      const { container } = render(<App bridge={bridge} />);
+      await open("Clear temp");
+      expect(container.querySelectorAll("[inert]")).toHaveLength(0);
+
+      pressRun();
+
+      // The header, both panes and the status line are all inert; the dialog is not.
+      expect(container.querySelectorAll("[inert]").length).toBeGreaterThan(0);
+      expect(screen.getByRole("dialog").closest("[inert]")).toBeNull();
+      expect(container.querySelector("header")!.hasAttribute("inert")).toBe(true);
+      expect(container.querySelector(".panes")!.hasAttribute("inert")).toBe(true);
+
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+      expect(container.querySelectorAll("[inert]")).toHaveLength(0);
+    });
+
     it("cancels the confirmation when Escape is pressed", async () => {
       let started = 0;
       const { bridge } = fakeBridge(cleanup2("normal"), {

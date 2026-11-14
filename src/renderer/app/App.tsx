@@ -119,9 +119,12 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
     }))
     .filter((category) => needle === "" || category.tools.length > 0);
 
+  // While a confirmation is open, nothing behind it can be reached or focused.
+  const backgroundInert = confirmingTool !== null;
+
   return (
     <div className="window">
-      <header className="topbar">
+      <header className="topbar" inert={backgroundInert}>
         {view === "tools" ? (
           <>
             <h1>Toolbox</h1>
@@ -149,7 +152,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
         )}
       </header>
       {view === "tools" ? (
-        <div className="panes">
+        <div className="panes" inert={backgroundInert}>
           <div className="list-pane">
             {loadError && (
               <div role="alert">
@@ -176,7 +179,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
           />
         </div>
       ) : (
-        <div className="log-view">
+        <div className="log-view" inert={backgroundInert}>
           <RunLogView
             bridge={bridge}
             refreshKey={endedRuns}
@@ -186,7 +189,7 @@ export function App({ bridge }: { bridge: ToolboxBridge }) {
         </div>
       )}
       {versions && (
-        <footer className="statusbar">
+        <footer className="statusbar" inert={backgroundInert}>
           Toolbox {versions.app} · {versions.windows}
         </footer>
       )}
