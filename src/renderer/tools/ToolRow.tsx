@@ -15,7 +15,7 @@ function RowStatus({ state }: { state: RunState | undefined }) {
         role="img"
         aria-label={ok ? "Finished" : "Failed"}
       >
-        <svg width="14" height="14" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+        <svg width="12" height="12" viewBox="0 0 16 16" aria-hidden="true" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           {ok ? <path d="m3 8.5 3.2 3.2L13 4.8" /> : <path d="m4 4 8 8M12 4l-8 8" />}
         </svg>
       </span>
@@ -43,12 +43,14 @@ export function ToolRow({
         aria-pressed={selected}
         onClick={onSelect}
       >
-        <RowStatus state={state} />
         <span className="tool-row-text">
-          <span className="tool-name">{tool.name}</span>
+          <span className="tool-line">
+            <span className="tool-name">{tool.name}</span>
+            <RiskChip risk={tool.risk} />
+          </span>
           <span className="tool-description">{tool.description}</span>
         </span>
-        <RiskChip risk={tool.risk} />
+        <RowStatus state={state} />
       </button>
     </li>
   );

@@ -37,6 +37,14 @@ export function ConfirmDialog({
         className={`dialog ${high ? "dialog-high" : "dialog-normal"}`}
       >
         <div className="dialog-head">
+          {high && (
+            <span className="dialog-tile" aria-hidden="true">
+              <svg width="22" height="22" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M8 2 1.5 13.5h13L8 2Z" />
+                <path d="M8 6.5v3.2M8 11.7v.1" />
+              </svg>
+            </span>
+          )}
           <RiskChip risk={tool.risk} />
           <h2>Run {tool.name}?</h2>
         </div>

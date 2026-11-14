@@ -29,7 +29,8 @@ h1 {
 }
 
 h2 {
-  font-size: 18px;
+  font-size: 20px;
+  line-height: 1.2;
   font-weight: 600;
 }
 
@@ -47,8 +48,9 @@ button {
   font: inherit;
   font-weight: 600;
   border: 1px solid transparent;
-  border-radius: 6px;
-  padding: 6px 16px;
+  border-radius: 4px;
+  height: 36px;
+  padding: 0 20px;
   cursor: pointer;
   background: var(--sf2);
   color: var(--tx);
@@ -61,7 +63,9 @@ input:focus-visible {
 }
 
 button:disabled {
-  opacity: 0.45;
+  background: var(--hv);
+  color: var(--mu);
+  border-color: var(--bd);
   cursor: not-allowed;
 }
 
@@ -71,9 +75,10 @@ button.primary {
 }
 
 button.secondary {
-  background: var(--sf);
+  background: var(--btn2);
   color: var(--tx);
   border-color: var(--bd);
+  border-bottom-color: var(--bds);
 }
 
 button.secondary:hover:not(:disabled) {
@@ -89,17 +94,21 @@ button.danger {
 button.link {
   background: none;
   border: 0;
+  height: auto;
   padding: 2px 0;
   color: var(--ac);
-  font-weight: 500;
+  font-size: 13.5px;
+  font-weight: 600;
 }
 
 input[type="search"] {
-  background: var(--sf);
+  background: var(--fld);
   color: var(--tx);
   border: 1px solid var(--bd);
-  border-radius: 6px;
-  padding: 7px 12px;
+  border-bottom-color: var(--bds);
+  border-radius: 4px;
+  height: 34px;
+  padding: 0 12px;
   font: inherit;
 }
 
@@ -108,8 +117,8 @@ pre {
   background: var(--code);
   border: 1px solid var(--bd);
   border-radius: 6px;
-  padding: 8px 10px;
-  font: 12px/1.5 var(--font-mono);
+  padding: 12px 14px;
+  font: 12.5px/1.65 var(--font-mono);
   white-space: pre-wrap;
   overflow-x: auto;
 }
@@ -119,8 +128,9 @@ pre:empty {
 }
 
 [role="alert"] {
-  border: 1px solid var(--err);
-  color: var(--err);
+  border: 2px solid var(--tx);
+  color: var(--tx);
+  font-weight: 600;
   border-radius: 8px;
   padding: 10px 14px;
 }

@@ -10,7 +10,7 @@
   display: flex;
   align-items: center;
   gap: 16px;
-  height: 52px;
+  height: var(--header-h);
   padding: 0 16px;
   background: var(--sf);
   border-bottom: 1px solid var(--bd);
@@ -18,9 +18,12 @@
 }
 
 .topbar .search {
-  flex: 1;
-  max-width: 420px;
+  width: 360px;
   margin-left: auto;
+}
+
+.topbar button {
+  height: 32px;
 }
 
 .topbar .search + button {
@@ -31,7 +34,7 @@
   flex: 1;
   min-height: 0;
   display: grid;
-  grid-template-columns: minmax(340px, 5fr) 6fr;
+  grid-template-columns: var(--list-w) 1fr;
 }
 
 .list-pane {
@@ -51,7 +54,10 @@
 
 .statusbar {
   flex: none;
-  padding: 6px 16px;
+  height: var(--status-h);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
   color: var(--mu);
   font-size: 12px;
   border-top: 1px solid var(--bd);

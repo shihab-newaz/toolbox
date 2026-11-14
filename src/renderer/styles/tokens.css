@@ -3,7 +3,7 @@
   color-scheme: light dark;
 
   --font-ui: "Figtree", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
-  --font-mono: "Cascadia Mono", Consolas, monospace;
+  --font-mono: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
 
   --bg: #f3f3f3;
   --sf: #ffffff;
@@ -16,6 +16,8 @@
   --bds: #8d8d8d;
   --ac: #005fb8;
   --acon: #ffffff;
+  --fld: #ffffff;
+  --btn2: #fdfdfd;
   --code: #f6f6f6;
   --scrim: rgba(0, 0, 0, 0.34);
   --shadow: 0 16px 48px rgba(0, 0, 0, 0.28);
@@ -33,9 +35,10 @@
   --hbd: #c42b1c;
   --htint: #fde7e9;
 
-  /* Run outcome marks, kept apart from the Risk level colours. */
-  --ok: #0f7b0f;
-  --err: #b3261e;
+  /* Layout. */
+  --header-h: 52px;
+  --list-w: 380px;
+  --status-h: 28px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -51,6 +54,8 @@
     --bds: #7a7a7a;
     --ac: #60cdff;
     --acon: #0a0a0a;
+    --fld: #333333;
+    --btn2: #383838;
     --code: #202020;
     --scrim: rgba(0, 0, 0, 0.56);
     --shadow: 0 16px 48px rgba(0, 0, 0, 0.6);
@@ -63,8 +68,5 @@
     --ntint: #3b3014;
     --hbd: #ea6a5c;
     --htint: #3f2326;
-
-    --ok: #6ccb5f;
-    --err: #ff8f85;
   }
 }
