@@ -211,12 +211,12 @@
 
 .dialog-normal {
   border-top: 4px solid var(--nbd);
-  background: linear-gradient(var(--ntint), var(--ntint) 0, var(--sf) 90px);
+  background: var(--ntint);
 }
 
 .dialog-high {
   border-top: 4px solid var(--hb);
-  background: linear-gradient(var(--htint), var(--htint) 0, var(--sf) 90px);
+  background: var(--htint);
 }
 
 .dialog-head {

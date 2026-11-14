@@ -7,6 +7,7 @@ Draft, derived from the Claude Design mockup (`Toolbox.html`, 11 pages) and the 
 - The main user is a non-technical person the author hands the app to. Calm, plain-spoken, never a hacker terminal.
 - Show what will happen before it happens. Cancel is always reachable.
 - Risk level is the only thing that uses red, amber and green. The accent colour is for interaction only.
+- Solid colours only. No gradients anywhere: no `linear-gradient`, `radial-gradient` or `conic-gradient`, in backgrounds, borders or fades. Depth comes from the surface tokens, borders and the one dialog shadow.
 - A Tool has no screen of its own. Every Tool renders through the same list row, panel, confirmation and Run view.
 
 ## Platform
