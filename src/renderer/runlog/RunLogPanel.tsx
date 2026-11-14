@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import type { RunLogEntry, ToolboxBridge } from "../shared/types";
+import type { RunLogEntry, ToolboxBridge } from "../../shared/types";
 
 const localTime = (iso: string) => new Date(iso).toLocaleString();
 
