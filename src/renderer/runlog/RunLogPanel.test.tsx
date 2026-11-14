@@ -51,12 +51,20 @@ function fakeClipboard(writeText: (text: string) => Promise<void>) {
   Object.defineProperty(navigator, "clipboard", { value: { writeText }, configurable: true });
 }
 
+/** Opens the Run log, which is a view of its own. */
+const openLog = () => fireEvent.click(screen.getByRole("button", { name: "Run log" }));
+const openTool = async (name: string) =>
+  fireEvent.click(within((await screen.findByText(name)).closest("li")!).getByRole("button"));
+const pressRun = () =>
+  fireEvent.click(within(screen.getByRole("region", { name: "Tool panel" })).getByRole("button", { name: "Run" }));
+
 const logPanel = () => screen.getByRole("region", { name: "Run log" });
 const localTime = (iso: string) => new Date(iso).toLocaleString();
 
 describe("Run log panel", () => {
   it("says so when there are no Runs yet", async () => {
     render(<App bridge={fakeBridge()} />);
+    openLog();
 
     expect(await within(logPanel()).findByText(/no runs yet/i)).toBeTruthy();
   });
@@ -64,6 +72,7 @@ describe("Run log panel", () => {
   it("shows a past Run with its Tool, start and end time, commands, output and result", async () => {
     const run = entry();
     render(<App bridge={fakeBridge({ getRunLog: async () => [run] })} />);
+    openLog();
 
     const row = (await within(logPanel()).findByText("Free-space check")).closest("li")!;
     expect(within(row).getByText("Succeeded")).toBeTruthy();
@@ -81,6 +90,7 @@ describe("Run log panel", () => {
       result: { ok: false, failedStep: 1, exitCode: 5, error: "Could not start powershell.exe" },
     });
     render(<App bridge={fakeBridge({ getRunLog: async () => [failed] })} />);
+    openLog();
 
     const row = (await within(logPanel()).findByText("Flush DNS")).closest("li")!;
     expect(within(row).getByText("Failed at Step 2 (exit code 5)")).toBeTruthy();
@@ -96,6 +106,7 @@ describe("Run log panel", () => {
       entry({ toolName: "Oldest", startedAt: "2026-11-13T10:00:00.000Z" }),
     ];
     render(<App bridge={fakeBridge({ getRunLog: async () => log })} />);
+    openLog();
 
     await within(logPanel()).findByText("Newest");
     const names = within(logPanel())
@@ -114,9 +125,14 @@ describe("Run log panel", () => {
       },
     });
     render(<App bridge={bridge} />);
+    openLog();
     await within(logPanel()).findByText(/no runs yet/i);
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await openTool("Free-space check");
+    pressRun();
+    await screen.findByText(/finished/i);
+    openLog();
 
     expect(await within(logPanel()).findByText(/fresh output/)).toBeTruthy();
     expect(within(logPanel()).queryByText(/no runs yet/i)).toBeNull();
@@ -138,10 +154,15 @@ describe("Run log panel", () => {
       },
     });
     render(<App bridge={bridge} />);
+    openLog();
     await within(logPanel()).findByText(/top/);
     expect(within(logPanel()).getAllByRole("listitem")).toHaveLength(5);
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
 
-    fireEvent.click(await screen.findByRole("button", { name: "Run" }));
+    await openTool("Free-space check");
+    pressRun();
+    await screen.findByText(/finished/i);
+    openLog();
 
     await within(logPanel()).findByText(/fresh/);
     const rows = within(logPanel()).getAllByRole("listitem");
@@ -165,6 +186,7 @@ describe("Run log panel", () => {
       result: { ok: false, failedStep: 1, exitCode: 2, error: "Lease refused" },
     });
     render(<App bridge={fakeBridge({ getRunLog: async () => [first, second] })} />);
+    openLog();
 
     const row = (await within(logPanel()).findByText("Renew IP")).closest("li")!;
     fireEvent.click(within(row).getByRole("button", { name: "Copy" }));
@@ -194,6 +216,7 @@ describe("Run log panel", () => {
       throw new Error("Clipboard is busy");
     });
     render(<App bridge={fakeBridge({ getRunLog: async () => [entry()] })} />);
+    openLog();
 
     const row = (await within(logPanel()).findByText("Free-space check")).closest("li")!;
     fireEvent.click(within(row).getByRole("button", { name: "Copy" }));
@@ -208,9 +231,11 @@ describe("Run log panel", () => {
       },
     });
     render(<App bridge={bridge} />);
+    openLog();
 
     expect(await within(logPanel()).findByText(/could not load the run log/i)).toBeTruthy();
-    expect(await screen.findByRole("button", { name: "Run" })).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+    expect(await screen.findByText("Free-space check")).toBeTruthy();
   });
 });
 

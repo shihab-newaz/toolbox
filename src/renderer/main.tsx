@@ -3,7 +3,7 @@ import type { ToolboxBridge } from "@shared/types";
 import { App } from "./app/App";
 import "./styles/fonts.css";
 import "./styles/tokens.css";
-import "./styles.css";
+import "./styles/base.css";
 
 declare global {
   interface Window {

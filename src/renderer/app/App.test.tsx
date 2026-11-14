@@ -37,6 +37,24 @@ function fakeBridge(manifest: Manifest, overrides: Partial<ToolboxBridge> = {}) 
   return { bridge, emit };
 }
 
+/** The Tool's row in the list. */
+const row = (name: string) => within(screen.getByRole("region", { name: "Tools" })).getByText(name).closest("li")!;
+const toolPanel = () => screen.getByRole("region", { name: "Tool panel" });
+
+/** Chooses a Tool in the list, which opens it in the Tool panel. */
+async function open(name: string) {
+  const inList = within(await screen.findByRole("region", { name: "Tools" })).getByText(name);
+  fireEvent.click(within(inList.closest("li")!).getByRole("button"));
+}
+
+/** Presses Run in the Tool panel. */
+const pressRun = () => fireEvent.click(within(toolPanel()).getByRole("button", { name: "Run" }));
+const runButton = () => within(toolPanel()).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+
+const spaceManifest: Manifest = {
+  categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }],
+};
+
 describe("App", () => {
   it("lists every Category and Tool that the Manifest defines", async () => {
     const { bridge } = fakeBridge({
@@ -55,7 +73,7 @@ describe("App", () => {
     expect(screen.getByText("Count penguins")).toBeTruthy();
   });
 
-  it("shows each Tool's description and its Risk level", async () => {
+  it("shows each Tool's description and its Risk level on its row", async () => {
     const { bridge } = fakeBridge({
       categories: [
         {
@@ -71,28 +89,53 @@ describe("App", () => {
     expect(await screen.findByText("Peek description")).toBeTruthy();
     expect(screen.getByText("Tidy description")).toBeTruthy();
     expect(screen.getByText("Purge description")).toBeTruthy();
-    for (const [name, risk] of [["Peek", "read-only"], ["Tidy", "normal"], ["Purge", "high"]]) {
-      const row = screen.getByText(name!).closest("li")!;
-      expect(within(row).getByText(`Risk: ${risk}`)).toBeTruthy();
+    for (const [name, risk] of [["Peek", "Read-only"], ["Tidy", "Normal"], ["Purge", "High"]]) {
+      expect(within(row(name!)).getByText(risk!)).toBeTruthy();
     }
+  });
+
+  it("asks the user to pick a Tool until one is chosen, and runs nothing meanwhile", async () => {
+    let started = 0;
+    const { bridge } = fakeBridge(spaceManifest, { runTool: async () => (started++, { ok: true, failedStep: null, exitCode: 0 }) });
+    render(<App bridge={bridge} />);
+
+    await screen.findByText("Free-space check");
+    expect(within(toolPanel()).getByText("Pick a Tool to get started")).toBeTruthy();
+    expect(within(toolPanel()).queryByRole("button", { name: "Run" })).toBeNull();
+    expect(started).toBe(0);
+  });
+
+  it("opens the chosen Tool in the Tool panel with its name, Risk level, plain summary and description", async () => {
+    const { bridge } = fakeBridge({
+      categories: [{ id: "c", name: "Cleanup", tools: [tool("a", "Peek", "read-only"), tool("b", "Tidy", "normal")] }],
+    });
+    render(<App bridge={bridge} />);
+
+    await open("Tidy");
+
+    const panel = toolPanel();
+    expect(within(panel).getByRole("heading", { name: "Tidy" })).toBeTruthy();
+    expect(within(panel).getByText("Normal")).toBeTruthy();
+    expect(within(panel).getByText("Changes things Windows rebuilds on its own")).toBeTruthy();
+    expect(within(panel).getByText("Tidy description")).toBeTruthy();
+    expect(within(panel).getByText(/nothing yet/i)).toBeTruthy();
+    expect(row("Tidy").querySelector("button")!.getAttribute("aria-pressed")).toBe("true");
+    expect(row("Peek").querySelector("button")!.getAttribute("aria-pressed")).toBe("false");
   });
 
   it("runs a read-only Tool at once with no confirmation, shows its output as it arrives, then its result", async () => {
     let finish!: (r: RunResult) => void;
     const ran: Array<[string, boolean]> = [];
-    const { bridge, emit } = fakeBridge(
-      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
-      {
-        runTool: (toolId, confirmed) => {
-          ran.push([toolId, confirmed]);
-          return new Promise<RunResult>((resolve) => (finish = resolve));
-        },
+    const { bridge, emit } = fakeBridge(spaceManifest, {
+      runTool: (toolId, confirmed) => {
+        ran.push([toolId, confirmed]);
+        return new Promise<RunResult>((resolve) => (finish = resolve));
       },
-    );
+    });
     render(<App bridge={bridge} />);
 
-    const row = (await screen.findByText("Free-space check")).closest("li")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+    await open("Free-space check");
+    pressRun();
 
     // Nothing was confirmed, and the request says so.
     expect(ran).toEqual([["space", false]]);
@@ -104,25 +147,23 @@ describe("App", () => {
     expect(screen.queryByText(/finished/i)).toBeNull();
 
     await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
-    expect(screen.getByText(/finished/i)).toBeTruthy();
+    expect(within(toolPanel()).getByText(/finished/i)).toBeTruthy();
+    expect(within(toolPanel()).getByText(/took \d+ s · ended at/i)).toBeTruthy();
   });
 
   it("ignores a second Run of a Tool that is already running, and re-enables Run when it ends", async () => {
     let finish!: (r: RunResult) => void;
     let started = 0;
-    const { bridge } = fakeBridge(
-      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
-      {
-        runTool: () => {
-          started += 1;
-          return new Promise<RunResult>((resolve) => (finish = resolve));
-        },
+    const { bridge } = fakeBridge(spaceManifest, {
+      runTool: () => {
+        started += 1;
+        return new Promise<RunResult>((resolve) => (finish = resolve));
       },
-    );
+    });
     render(<App bridge={bridge} />);
 
-    const row = (await screen.findByText("Free-space check")).closest("li")!;
-    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    await open("Free-space check");
+    const button = runButton();
     fireEvent.click(button);
     fireEvent.click(button);
 
@@ -131,23 +172,21 @@ describe("App", () => {
 
     await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
     expect(button.disabled).toBe(false);
+    expect(button.textContent).toBe("Run again");
   });
 
   it("starts a Tool once even when two clicks land before the screen can re-render", async () => {
     let started = 0;
-    const { bridge } = fakeBridge(
-      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
-      {
-        runTool: () => {
-          started += 1;
-          return new Promise<RunResult>(() => {});
-        },
+    const { bridge } = fakeBridge(spaceManifest, {
+      runTool: () => {
+        started += 1;
+        return new Promise<RunResult>(() => {});
       },
-    );
+    });
     render(<App bridge={bridge} />);
 
-    const row = (await screen.findByText("Free-space check")).closest("li")!;
-    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    await open("Free-space check");
+    const button = runButton();
     // Both clicks run inside one act(): React cannot re-render (and disable the button) between them.
     act(() => {
       button.click();
@@ -158,14 +197,13 @@ describe("App", () => {
   });
 
   it("shows a Failed result and re-enables Run when the call to run the Tool itself fails", async () => {
-    const { bridge } = fakeBridge(
-      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
-      { runTool: async () => { throw new Error("IPC channel closed"); } },
-    );
+    const { bridge } = fakeBridge(spaceManifest, {
+      runTool: async () => { throw new Error("IPC channel closed"); },
+    });
     render(<App bridge={bridge} />);
 
-    const row = (await screen.findByText("Free-space check")).closest("li")!;
-    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    await open("Free-space check");
+    const button = runButton();
     fireEvent.click(button);
 
     expect(await screen.findByText(/failed/i)).toBeTruthy();
@@ -177,21 +215,18 @@ describe("App", () => {
   it("clears the previous output when a Tool is run again", async () => {
     let runs = 0;
     let emitOutput!: (toolId: string, text: string) => void;
-    const fake = fakeBridge(
-      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
-      {
-        runTool: async (toolId) => {
-          runs += 1;
-          emitOutput(toolId, `output of run ${runs}`);
-          return { ok: true, failedStep: null, exitCode: 0 };
-        },
+    const fake = fakeBridge(spaceManifest, {
+      runTool: async (toolId) => {
+        runs += 1;
+        emitOutput(toolId, `output of run ${runs}`);
+        return { ok: true, failedStep: null, exitCode: 0 };
       },
-    );
+    });
     emitOutput = (toolId, text) => fake.emit(toolId, text);
     render(<App bridge={fake.bridge} />);
 
-    const row = (await screen.findByText("Free-space check")).closest("li")!;
-    const run = within(row).getByRole("button", { name: "Run" });
+    await open("Free-space check");
+    const run = runButton();
     fireEvent.click(run);
     await screen.findByText(/output of run 1/);
     fireEvent.click(run);
@@ -201,133 +236,267 @@ describe("App", () => {
   });
 
   it("shows a failed Run as failed, with its exit code and error", async () => {
-    const { bridge } = fakeBridge(
-      { categories: [{ id: "c", name: "Disk", tools: [tool("space", "Free-space check")] }] },
-      {
-        runTool: async () => ({
-          ok: false,
-          failedStep: 0,
-          exitCode: 3,
-          error: "Could not start powershell.exe",
-        }),
-      },
-    );
+    const { bridge } = fakeBridge(spaceManifest, {
+      runTool: async () => ({
+        ok: false,
+        failedStep: 0,
+        exitCode: 3,
+        error: "Could not start powershell.exe",
+      }),
+    });
     render(<App bridge={bridge} />);
 
-    const row = (await screen.findByText("Free-space check")).closest("li")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+    await open("Free-space check");
+    pressRun();
 
     expect(await screen.findByText(/failed/i)).toBeTruthy();
     expect(screen.getByText(/exit code 3/i)).toBeTruthy();
+    expect(screen.getByText(/at step 1/i)).toBeTruthy();
     expect(screen.getByText(/could not start powershell\.exe/i)).toBeTruthy();
     expect(screen.queryByText(/finished/i)).toBeNull();
   });
 
-  it.each(["normal", "high"] as const)(
-    "shows every command of every Step of a %s Tool and runs it only once that is confirmed",
-    async (risk) => {
-      const ran: Array<[string, boolean]> = [];
-      const { bridge } = fakeBridge(
-        {
-          categories: [
-            {
-              id: "c",
-              name: "Cleanup",
-              tools: [
-                {
-                  ...tool("temp", "Clear temp", risk),
-                  steps: [
-                    { kind: "command", command: "Remove-Item first-thing" },
-                    { kind: "command", command: "Remove-Item second-thing" },
-                  ],
-                },
-              ],
-            },
-          ],
-        },
-        {
-          runTool: async (toolId, confirmed) => {
-            ran.push([toolId, confirmed]);
-            return { ok: true, failedStep: null, exitCode: 0 };
-          },
-        },
-      );
-      render(<App bridge={bridge} />);
-
-      const row = (await screen.findByText("Clear temp")).closest("li")!;
-      expect(within(row).queryByRole("dialog")).toBeNull();
-      fireEvent.click(within(row).getByRole("button", { name: "Run" }));
-
-      const confirmation = within(row).getByRole("dialog");
-      expect(within(confirmation).getByText("Remove-Item first-thing")).toBeTruthy();
-      expect(within(confirmation).getByText("Remove-Item second-thing")).toBeTruthy();
-      expect(ran).toEqual([]);
-
-      fireEvent.click(within(confirmation).getByRole("button", { name: "Confirm" }));
-
-      expect(ran).toEqual([["temp", true]]);
-      expect(within(row).queryByRole("dialog")).toBeNull();
-      expect(await within(row).findByText(/finished/i)).toBeTruthy();
-    },
-  );
-
-  it("runs nothing when the confirmation is cancelled, and Run can be chosen again", async () => {
-    let started = 0;
-    const { bridge } = fakeBridge(
-      { categories: [{ id: "c", name: "Cleanup", tools: [tool("temp", "Clear temp", "normal")] }] },
-      {
-        runTool: async () => {
-          started += 1;
-          return { ok: true, failedStep: null, exitCode: 0 };
-        },
-      },
-    );
+  it("shows the Run in the panel of the Tool it belongs to, not in another Tool's panel", async () => {
+    const { bridge, emit } = fakeBridge({
+      categories: [{ id: "c", name: "Disk", tools: [tool("a", "First"), tool("b", "Second")] }],
+    });
     render(<App bridge={bridge} />);
+    await open("First");
+    pressRun();
+    act(() => emit("a", "first tool output"));
+    await screen.findByText(/first tool output/);
 
-    const row = (await screen.findByText("Clear temp")).closest("li")!;
-    const run = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
-    fireEvent.click(run);
-    fireEvent.click(within(row).getByRole("button", { name: "Cancel" }));
+    await open("Second");
 
-    expect(within(row).queryByRole("dialog")).toBeNull();
-    expect(started).toBe(0);
-    expect(within(row).queryByText(/finished|failed/i)).toBeNull();
-    expect(run.disabled).toBe(false);
-
-    fireEvent.click(run);
-    expect(within(row).getByRole("dialog")).toBeTruthy();
-    expect(started).toBe(0);
+    expect(screen.queryByText(/first tool output/)).toBeNull();
+    expect(within(toolPanel()).getByText(/nothing yet/i)).toBeTruthy();
   });
 
-  it("confirms one Tool at a time, and shows a pause Step's message in order with the commands", async () => {
-    const { bridge } = fakeBridge({
+  describe("row status", () => {
+    const twoTools: Manifest = {
+      categories: [{ id: "c", name: "Disk", tools: [tool("a", "First"), tool("b", "Second")] }],
+    };
+
+    it("shows a spinner on a running Tool's row, even while another Tool is open, and lets other Tools run too", async () => {
+      const finishers: Record<string, (r: RunResult) => void> = {};
+      const { bridge } = fakeBridge(twoTools, {
+        runTool: (toolId) => new Promise<RunResult>((resolve) => (finishers[toolId] = resolve)),
+      });
+      render(<App bridge={bridge} />);
+      await open("First");
+      pressRun();
+
+      await open("Second");
+      expect(within(row("First")).getByRole("img", { name: "Running" })).toBeTruthy();
+      expect(within(row("Second")).queryByRole("img")).toBeNull();
+
+      // Concurrent Runs: the second Tool starts while the first is still going.
+      pressRun();
+      expect(within(row("Second")).getByRole("img", { name: "Running" })).toBeTruthy();
+      expect(within(row("First")).getByRole("img", { name: "Running" })).toBeTruthy();
+
+      await act(async () => finishers["a"]!({ ok: true, failedStep: null, exitCode: 0 }));
+      expect(within(row("First")).queryByRole("img", { name: "Running" })).toBeNull();
+      expect(within(row("Second")).getByRole("img", { name: "Running" })).toBeTruthy();
+    });
+
+    it("keeps a Finished mark on the row of a Run that ended elsewhere, until that Tool is opened", async () => {
+      let finish!: (r: RunResult) => void;
+      const { bridge } = fakeBridge(twoTools, {
+        runTool: () => new Promise<RunResult>((resolve) => (finish = resolve)),
+      });
+      render(<App bridge={bridge} />);
+      await open("First");
+      pressRun();
+      await open("Second");
+
+      await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
+      expect(within(row("First")).getByRole("img", { name: "Finished" })).toBeTruthy();
+
+      await open("First");
+      expect(within(row("First")).queryByRole("img")).toBeNull();
+    });
+
+    it("keeps a Failed mark on the row of a failed Run until that Tool is opened", async () => {
+      let finish!: (r: RunResult) => void;
+      const { bridge } = fakeBridge(twoTools, {
+        runTool: () => new Promise<RunResult>((resolve) => (finish = resolve)),
+      });
+      render(<App bridge={bridge} />);
+      await open("First");
+      pressRun();
+      await open("Second");
+
+      await act(async () => finish({ ok: false, failedStep: 0, exitCode: 1 }));
+      expect(within(row("First")).getByRole("img", { name: "Failed" })).toBeTruthy();
+
+      await open("First");
+      expect(within(row("First")).queryByRole("img")).toBeNull();
+    });
+
+    it("shows no mark for a Run that ends in the panel the user is looking at", async () => {
+      let finish!: (r: RunResult) => void;
+      const { bridge } = fakeBridge(twoTools, {
+        runTool: () => new Promise<RunResult>((resolve) => (finish = resolve)),
+      });
+      render(<App bridge={bridge} />);
+      await open("First");
+      pressRun();
+
+      await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
+
+      expect(within(row("First")).queryByRole("img")).toBeNull();
+    });
+  });
+
+  describe("confirmation", () => {
+    const cleanup2 = (risk: "normal" | "high", extra = {}): Manifest => ({
       categories: [
         {
           id: "c",
-          name: "Developer",
+          name: "Cleanup",
           tools: [
             {
-              ...tool("shrink", "Docker shrink", "normal"),
+              ...tool("temp", "Clear temp", risk),
               steps: [
-                { kind: "command", command: "docker system prune" },
-                { kind: "pause", message: "Quit Docker Desktop, then continue" },
-                { kind: "command", command: "Optimize-VHD disk" },
+                { kind: "command", command: "Remove-Item first-thing" },
+                { kind: "command", command: "Remove-Item second-thing" },
               ],
+              ...extra,
             },
-            tool("npm", "Clear npm cache", "normal"),
           ],
         },
       ],
     });
-    render(<App bridge={bridge} />);
 
-    const row = (await screen.findByText("Docker shrink")).closest("li")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+    it("keeps the commands of a normal Tool collapsed until asked, then shows every command of every Step, and runs it only once confirmed", async () => {
+      const ran: Array<[string, boolean]> = [];
+      const { bridge } = fakeBridge(cleanup2("normal"), {
+        runTool: async (toolId, confirmed) => {
+          ran.push([toolId, confirmed]);
+          return { ok: true, failedStep: null, exitCode: 0 };
+        },
+      });
+      render(<App bridge={bridge} />);
+      await open("Clear temp");
+      expect(screen.queryByRole("dialog")).toBeNull();
 
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    expect(within(row).getByRole("dialog").textContent).toMatch(
-      /docker system prune[\s\S]*Quit Docker Desktop, then continue[\s\S]*Optimize-VHD disk/,
-    );
+      pressRun();
+
+      const dialog = screen.getByRole("dialog", { name: "Confirm Clear temp" });
+      expect(within(dialog).getByText("Normal")).toBeTruthy();
+      expect(within(dialog).getByText("This changes things on your PC that Windows rebuilds by itself.")).toBeTruthy();
+      expect(within(dialog).queryByText("Remove-Item first-thing")).toBeNull();
+      const toggle = within(dialog).getByRole("button", { name: "Show commands" });
+      expect(toggle.getAttribute("aria-expanded")).toBe("false");
+
+      fireEvent.click(toggle);
+      expect(within(dialog).getByText("Remove-Item first-thing")).toBeTruthy();
+      expect(within(dialog).getByText("Remove-Item second-thing")).toBeTruthy();
+      expect(within(dialog).getByRole("button", { name: "Hide commands" }).getAttribute("aria-expanded")).toBe("true");
+      expect(ran).toEqual([]);
+
+      fireEvent.click(within(dialog).getByRole("button", { name: "Confirm" }));
+
+      expect(ran).toEqual([["temp", true]]);
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(await within(toolPanel()).findByText(/finished/i)).toBeTruthy();
+    });
+
+    it("shows the commands of a high Tool open from the start, and says in plain words that something may be lost", async () => {
+      const ran: Array<[string, boolean]> = [];
+      const { bridge } = fakeBridge(cleanup2("high"), {
+        runTool: async (toolId, confirmed) => {
+          ran.push([toolId, confirmed]);
+          return { ok: true, failedStep: null, exitCode: 0 };
+        },
+      });
+      render(<App bridge={bridge} />);
+      await open("Clear temp");
+
+      pressRun();
+
+      const dialog = screen.getByRole("dialog", { name: "Confirm Clear temp" });
+      expect(within(dialog).getByText("High")).toBeTruthy();
+      expect(within(dialog).getByText(/you may lose something you want back, and there is no undo/i)).toBeTruthy();
+      expect(within(dialog).getByText("Remove-Item first-thing")).toBeTruthy();
+      expect(within(dialog).getByText("Remove-Item second-thing")).toBeTruthy();
+      expect(within(dialog).getByRole("button", { name: "Hide commands" })).toBeTruthy();
+      // No type-to-confirm: there is no text field, and one click confirms.
+      expect(within(dialog).queryByRole("textbox")).toBeNull();
+      fireEvent.click(within(dialog).getByRole("button", { name: "Confirm" }));
+      expect(ran).toEqual([["temp", true]]);
+    });
+
+    it("runs nothing when the confirmation is cancelled, and Run can be chosen again", async () => {
+      let started = 0;
+      const { bridge } = fakeBridge(cleanup2("normal"), {
+        runTool: async () => {
+          started += 1;
+          return { ok: true, failedStep: null, exitCode: 0 };
+        },
+      });
+      render(<App bridge={bridge} />);
+      await open("Clear temp");
+      const run = runButton();
+      fireEvent.click(run);
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Cancel" }));
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(started).toBe(0);
+      expect(within(toolPanel()).queryByText(/finished|failed/i)).toBeNull();
+      expect(run.disabled).toBe(false);
+
+      fireEvent.click(run);
+      expect(screen.getByRole("dialog")).toBeTruthy();
+      expect(started).toBe(0);
+    });
+
+    it("cancels the confirmation when Escape is pressed", async () => {
+      let started = 0;
+      const { bridge } = fakeBridge(cleanup2("normal"), {
+        runTool: async () => (started++, { ok: true, failedStep: null, exitCode: 0 }),
+      });
+      render(<App bridge={bridge} />);
+      await open("Clear temp");
+      pressRun();
+
+      fireEvent.keyDown(window, { key: "Escape" });
+
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(started).toBe(0);
+    });
+
+    it("shows a pause Step's message in order with the commands", async () => {
+      const { bridge } = fakeBridge({
+        categories: [
+          {
+            id: "c",
+            name: "Developer",
+            tools: [
+              {
+                ...tool("shrink", "Docker shrink", "normal"),
+                steps: [
+                  { kind: "command", command: "docker system prune" },
+                  { kind: "pause", message: "Quit Docker Desktop, then continue" },
+                  { kind: "command", command: "Optimize-VHD disk" },
+                ],
+              },
+              tool("npm", "Clear npm cache", "normal"),
+            ],
+          },
+        ],
+      });
+      render(<App bridge={bridge} />);
+      await open("Docker shrink");
+      pressRun();
+      fireEvent.click(within(screen.getByRole("dialog")).getByRole("button", { name: "Show commands" }));
+
+      expect(screen.getAllByRole("dialog")).toHaveLength(1);
+      expect(screen.getByRole("dialog").textContent).toMatch(
+        /docker system prune[\s\S]*Quit Docker Desktop, then continue[\s\S]*Optimize-VHD disk/,
+      );
+    });
   });
 
   it("shows the app version and the Windows version", async () => {
@@ -375,6 +544,56 @@ describe("App", () => {
     expect(await screen.findByText(/could not load the manifest/i)).toBeTruthy();
     expect(screen.getByText(/must contain a categories list/i)).toBeTruthy();
   });
+
+  it("shows no Administrator banner or chip", async () => {
+    const { bridge } = fakeBridge(spaceManifest);
+    render(<App bridge={bridge} />);
+
+    await screen.findByText("Free-space check");
+
+    expect(screen.queryByText(/administrator/i)).toBeNull();
+  });
+});
+
+describe("App views", () => {
+  it("opens the Run log as a view of its own from the header, and returns to the Tools with the back control", async () => {
+    const { bridge } = fakeBridge(spaceManifest);
+    render(<App bridge={bridge} />);
+    await open("Free-space check");
+
+    fireEvent.click(await screen.findByRole("button", { name: "Run log" }));
+
+    expect(await screen.findByRole("heading", { name: "Run log", level: 1 })).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Tools" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Tool panel" })).toBeNull();
+    expect(screen.queryByRole("searchbox")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+
+    expect(screen.getByRole("region", { name: "Tools" })).toBeTruthy();
+    // The Tool that was open is still open.
+    expect(within(toolPanel()).getByRole("heading", { name: "Free-space check" })).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: "Run log", level: 1 })).toBeNull();
+  });
+
+  it("keeps a Run going, with its output, while the Run log is open", async () => {
+    let finish!: (r: RunResult) => void;
+    const { bridge, emit } = fakeBridge(spaceManifest, {
+      runTool: () => new Promise<RunResult>((resolve) => (finish = resolve)),
+    });
+    render(<App bridge={bridge} />);
+    await open("Free-space check");
+    pressRun();
+    act(() => emit("space", "still going\n"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Run log" }));
+    fireEvent.click(screen.getByRole("button", { name: "Tools" }));
+
+    expect(screen.getByText(/still going/)).toBeTruthy();
+    expect((within(toolPanel()).getByRole("button", { name: "Running…" }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => finish({ ok: true, failedStep: null, exitCode: 0 }));
+    expect(within(toolPanel()).getByText(/finished/i)).toBeTruthy();
+  });
 });
 
 describe("App search box", () => {
@@ -409,14 +628,16 @@ describe("App search box", () => {
     fireEvent.change(box, { target: { value: text } });
   }
 
+  const list = () => within(screen.getByRole("region", { name: "Tools" }));
   const shownTools = () =>
-    screen.queryAllByRole("listitem").map((row) => row.querySelector("span")!.textContent);
+    list()
+      .queryAllByRole("listitem")
+      .map((item) => item.querySelector(".tool-name")!.textContent);
   const noMatchMessage = /no tool matches/i;
-  const shownCategories = () => screen
+  const shownCategories = () =>
+    list()
       .queryAllByRole("heading", { level: 2 })
-      .map((h) => h.textContent)
-      // The Run log panel has its own heading; it is not a Category.
-      .filter((name) => name !== "Run log");
+      .map((h) => h.textContent);
 
   it("shows the matching Tools from every Category, each under its Category name", async () => {
     const { bridge } = fakeBridge(zoo);
@@ -469,6 +690,7 @@ describe("App search box", () => {
     expect(shownCategories()).toEqual([]);
     expect(shownTools()).toEqual([]);
     expect(screen.getByText(noMatchMessage).textContent).toContain("quokka");
+    expect(screen.getByText(/check the spelling/i)).toBeTruthy();
   });
 
   it("ignores spaces around the search, and treats a search of only spaces as empty", async () => {
@@ -547,8 +769,8 @@ describe("App search box", () => {
     render(<App bridge={bridge} />);
     await search("printer");
 
-    const row = screen.getByText("Clear print queue").closest("li")!;
-    const button = within(row).getByRole("button", { name: "Run" }) as HTMLButtonElement;
+    await open("Clear print queue");
+    const button = runButton();
     fireEvent.click(button);
 
     expect(ran).toEqual(["spool"]);
@@ -568,16 +790,16 @@ describe("App search box", () => {
       },
     });
     render(<App bridge={bridge} />);
-    const row = (await screen.findByText("Clear print queue")).closest("li")!;
-    fireEvent.click(within(row).getByRole("button", { name: "Run" }));
+    await open("Clear print queue");
+    pressRun();
     await screen.findByText(/finished/i);
 
     await search("dns");
-    expect(screen.queryByText(/Spooler stopped/)).toBeNull();
+    // The open Tool stays open in its panel; only the list is narrowed.
+    expect(shownTools()).toEqual(["Flush DNS cache"]);
     await search("");
 
-    const shownAgain = screen.getByText("Clear print queue").closest("li")!;
-    expect(within(shownAgain).getByText(/Spooler stopped/)).toBeTruthy();
-    expect(within(shownAgain).getByText(/finished/i)).toBeTruthy();
+    expect(within(toolPanel()).getByText(/Spooler stopped/)).toBeTruthy();
+    expect(within(toolPanel()).getByText(/finished/i)).toBeTruthy();
   });
 });
