@@ -6,7 +6,7 @@ import type {
   OutputEvent,
   RunResult,
   ToolboxBridge,
-} from "../../shared/types";
+} from "@shared/types";
 import { App } from "./App";
 
 afterEach(cleanup);

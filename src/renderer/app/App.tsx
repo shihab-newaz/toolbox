@@ -5,7 +5,7 @@ import type {
   RunResult,
   ToolboxBridge,
   VersionInfo,
-} from "../../shared/types";
+} from "@shared/types";
 import { RunLogPanel } from "../runlog/RunLogPanel";
 
 interface RunState {

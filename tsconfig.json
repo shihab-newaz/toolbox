@@ -10,6 +10,7 @@
     "esModuleInterop": true,
     "skipLibCheck": true,
     "isolatedModules": true,
+    "paths": { "@shared/*": ["./src/shared/*"] },
     "types": ["vite/client", "node"]
   },
   "include": ["src/shared", "src/renderer", "src/main", "src/preload", "vite.config.mts"],
